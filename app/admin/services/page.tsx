@@ -139,11 +139,11 @@ export default function AdminServices() {
 
         {/* Main Content */}
         <div className={cn(
-          "flex-1 flex flex-col transition-all duration-300 ease-in-out",
-          sidebarOpen ? "lg:ml-64" : "lg:ml-0"
+          "flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0",
+          sidebarOpen ? "lg:ml-64" : "lg:ml-16"
         )}>
           {/* Header */}
-          <header className="bg-white shadow-sm border-b">
+          <header className="bg-white shadow-sm border-b flex-shrink-0">
             <div className="flex items-center justify-between px-4 py-4 lg:px-8">
               <div className="flex items-center gap-4">
                 <AdminMobileSidebar role="branch_admin" onLogout={handleLogout}
@@ -168,8 +168,8 @@ export default function AdminServices() {
           </header>
 
           {/* Content */}
-          <div className="flex-1 overflow-auto">
-            <div className="p-4 lg:p-8">
+          <div className="flex-1 overflow-auto min-h-0">
+            <div className="h-full p-4 lg:p-8">
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <Card>
@@ -262,7 +262,7 @@ export default function AdminServices() {
               {/* Services Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredServices.map((service) => (
-                  <Card key={service.id} className="hover:shadow-lg transition-shadow">
+                  <Card key={service.id}>
                     <div className="aspect-video bg-gray-200 rounded-t-lg overflow-hidden">
                       <img
                         src={service.image}

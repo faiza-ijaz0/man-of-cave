@@ -289,7 +289,7 @@ export default function AdminProducts() {
               {/* Products Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredProducts.map((product) => (
-                  <Card key={product.id} className="hover:shadow-lg transition-shadow">
+                  <Card key={product.id}>
                     <div className="aspect-video bg-gray-200 rounded-t-lg overflow-hidden relative">
                       <img
                         src={product.image}

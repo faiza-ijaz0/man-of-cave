@@ -137,11 +137,11 @@ export default function AdminStaff() {
 
         {/* Main Content */}
         <div className={cn(
-          "flex-1 flex flex-col transition-all duration-300 ease-in-out",
-          sidebarOpen ? "lg:ml-64" : "lg:ml-0"
+          "flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0",
+          sidebarOpen ? "lg:ml-64" : "lg:ml-16"
         )}>
           {/* Header */}
-          <header className="bg-white shadow-sm border-b">
+          <header className="bg-white shadow-sm border-b flex-shrink-0">
             <div className="flex items-center justify-between px-4 py-4 lg:px-8">
               <div className="flex items-center gap-4">
                 <AdminMobileSidebar
@@ -169,8 +169,8 @@ export default function AdminStaff() {
           </header>
 
           {/* Content */}
-          <div className="flex-1 overflow-auto">
-            <div className="p-4 lg:p-8">
+          <div className="flex-1 overflow-auto min-h-0">
+            <div className="h-full p-4 lg:p-8">
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <Card>
@@ -235,7 +235,7 @@ export default function AdminStaff() {
               {/* Staff Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {staff.map((member) => (
-                  <Card key={member.id} className="hover:shadow-lg transition-shadow">
+                  <Card key={member.id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-4">

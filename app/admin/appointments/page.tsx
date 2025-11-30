@@ -10,7 +10,8 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, User, Search, Filter, CheckCircle, XCircle, AlertCircle, Bell, Smartphone, Globe, Plus, Edit, Trash2, Phone, Mail, RefreshCw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Calendar, Clock, User, Search, Filter, CheckCircle, XCircle, AlertCircle, Bell, Smartphone, Globe, Plus, Edit, Trash2, Phone, Mail, RefreshCw, FileText, Scissors, Package, DollarSign, Receipt, CheckCircle2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { AdminSidebar, AdminMobileSidebar } from "@/components/admin/AdminSidebar";
@@ -30,7 +31,7 @@ export default function AdminAppointments() {
   };
 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [viewMode, setViewMode] = useState<'calendar' | 'advanced-calendar' | 'list'>('calendar');
+  const [viewMode, setViewMode] = useState<'calendar' | 'advanced-calendar' | 'list'>('advanced-calendar');
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
@@ -45,11 +46,56 @@ export default function AdminAppointments() {
     barber: '',
     date: '',
     time: '',
-    notes: ''
+    notes: '',
+    products: [] as Array<{name: string, category: string, price: number, quantity: number}>,
+    tax: 5,
+    serviceCharges: 0,
+    status: 'pending',
+    generateInvoice: false
   });
 
   // Notification system
   const { notifications, addNotification, markAsRead, dismiss } = useNotifications();
+
+  // Mock products data
+  const mockProducts = [
+    { name: "Premium Shampoo", category: "Hair Care", price: 15 },
+    { name: "Beard Oil", category: "Grooming", price: 12 },
+    { name: "Hair Wax", category: "Styling", price: 8 },
+    { name: "Face Mask", category: "Skincare", price: 20 },
+    { name: "Hair Clippers", category: "Tools", price: 45 },
+    { name: "Styling Gel", category: "Styling", price: 10 },
+    { name: "Aftershave", category: "Grooming", price: 18 },
+    { name: "Hair Brush", category: "Tools", price: 25 }
+  ];
+
+  // Helper functions for pricing
+  const getServicePrice = (serviceName: string) => {
+    const servicePrices: { [key: string]: number } = {
+      "Classic Haircut": 35,
+      "Beard Trim & Shape": 25,
+      "Premium Package": 85,
+      "Haircut & Style": 50,
+      "Hair Coloring": 120,
+      "Facial Treatment": 75
+    };
+    return servicePrices[serviceName] || 0;
+  };
+
+  const calculateTax = () => {
+    const servicePrice = getServicePrice(bookingData.service);
+    const productsTotal = bookingData.products.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+    const subtotal = servicePrice + productsTotal + bookingData.serviceCharges;
+    return ((subtotal * bookingData.tax) / 100).toFixed(2);
+  };
+
+  const calculateTotal = () => {
+    const servicePrice = getServicePrice(bookingData.service);
+    const productsTotal = bookingData.products.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+    const subtotal = servicePrice + productsTotal + bookingData.serviceCharges;
+    const taxAmount = (subtotal * bookingData.tax) / 100;
+    return (subtotal + taxAmount).toFixed(2);
+  };
 
   // Mock appointments data with more comprehensive data
   const appointments = [
@@ -297,7 +343,12 @@ export default function AdminAppointments() {
       barber: barber,
       date: date,
       time: time,
-      notes: ''
+      notes: '',
+      products: [],
+      tax: 5,
+      serviceCharges: 0,
+      status: 'pending',
+      generateInvoice: false
     });
     setShowBookingDialog(true);
   };
@@ -333,7 +384,12 @@ export default function AdminAppointments() {
       barber: '',
       date: '',
       time: '',
-      notes: ''
+      notes: '',
+      products: [],
+      tax: 5,
+      serviceCharges: 0,
+      status: 'pending',
+      generateInvoice: false
     });
   };
 
@@ -367,11 +423,11 @@ export default function AdminAppointments() {
 
         {/* Main Content */}
         <div className={cn(
-          "flex-1 flex flex-col transition-all duration-300 ease-in-out",
-          sidebarOpen ? "lg:ml-64" : "lg:ml-0"
+          "flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0",
+          sidebarOpen ? "lg:ml-64" : "lg:ml-16"
         )}>
           {/* Header */}
-          <header className="bg-white shadow-sm border-b">
+          <header className="bg-white shadow-sm border-b flex-shrink-0">
             <div className="flex items-center justify-between px-4 py-4 lg:px-8">
               <div className="flex items-center gap-4">
                 <AdminMobileSidebar
@@ -472,8 +528,8 @@ export default function AdminAppointments() {
           </header>
 
           {/* Content */}
-          <div className="flex-1 overflow-auto">
-            <div className="p-4 lg:p-8">
+          <div className="flex-1 overflow-auto min-h-0">
+            <div className="h-full p-4 lg:p-8">
               <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'calendar' | 'advanced-calendar' | 'list')}>
                 <div className="flex items-center justify-between mb-6">
                   <TabsList>
@@ -510,6 +566,13 @@ export default function AdminAppointments() {
                 </div>
 
                 <TabsContent value="calendar" className="space-y-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <div></div>
+                    <Button onClick={() => setShowBookingDialog(true)} className="flex items-center gap-2">
+                      <Plus className="w-4 h-4" />
+                      Create Booking
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                     {/* Calendar */}
                     <div className="md:col-span-2">
@@ -566,7 +629,7 @@ export default function AdminAppointments() {
                               {getAppointmentsForDate(selectedDate).map((appointment) => (
                                 <div
                                   key={appointment.id}
-                                  className="p-2 md:p-3 border rounded-lg cursor-pointer hover:bg-gray-50 hover:shadow-sm transition-all duration-200"
+                                  className="p-2 md:p-3 border rounded-lg cursor-pointer"
                                   onClick={() => handleAppointmentClick(appointment)}
                                 >
                                   <div className="flex items-center justify-between mb-2">
@@ -615,7 +678,7 @@ export default function AdminAppointments() {
                   {/* Appointments List */}
                   <div className="space-y-4">
                     {filteredAppointments.map((appointment) => (
-                      <Card key={appointment.id} className="hover:shadow-md transition-shadow">
+                      <Card key={appointment.id}>
                         <CardHeader className="pb-3">
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-4">
@@ -852,127 +915,367 @@ export default function AdminAppointments() {
 
       {/* Booking Creation Dialog */}
       <Sheet open={showBookingDialog} onOpenChange={setShowBookingDialog}>
-        <SheetContent className="sm:max-w-[500px]">
-          <SheetHeader>
-            <SheetTitle>Create New Booking</SheetTitle>
-            <SheetDescription>
+        <SheetContent className="sm:max-w-[900px] w-full z-[60] overflow-y-auto">
+          <SheetHeader className="border-b pb-4 mb-6">
+            <SheetTitle className="text-xl font-semibold">Create New Booking</SheetTitle>
+            <SheetDescription className="text-base">
               Schedule a new appointment for a customer.
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-6 py-6">
+          <div className="space-y-6 pb-6">
             {/* Customer Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Customer Information</h3>
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <User className="w-5 h-5 text-primary" />
+                Customer Information
+              </h3>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Customer Name *</label>
-                <Input
-                  placeholder="Enter customer name"
-                  value={bookingData.customer}
-                  onChange={(e) => setBookingData({...bookingData, customer: e.target.value})}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Phone</label>
+                  <label className="text-sm font-medium text-gray-700">Customer Name *</label>
                   <Input
-                    placeholder="(555) 123-4567"
-                    value={bookingData.phone}
-                    onChange={(e) => setBookingData({...bookingData, phone: e.target.value})}
+                    placeholder="Enter customer name"
+                    value={bookingData.customer}
+                    onChange={(e) => setBookingData({...bookingData, customer: e.target.value})}
+                    className="h-11"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Email</label>
-                  <Input
-                    type="email"
-                    placeholder="customer@email.com"
-                    value={bookingData.email}
-                    onChange={(e) => setBookingData({...bookingData, email: e.target.value})}
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Phone</label>
+                    <Input
+                      placeholder="(555) 123-4567"
+                      value={bookingData.phone}
+                      onChange={(e) => setBookingData({...bookingData, phone: e.target.value})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Email</label>
+                    <Input
+                      type="email"
+                      placeholder="customer@email.com"
+                      value={bookingData.email}
+                      onChange={(e) => setBookingData({...bookingData, email: e.target.value})}
+                      className="h-11"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Service Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Service Details</h3>
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Scissors className="w-5 h-5 text-primary" />
+                Service Details
+              </h3>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Service *</label>
-                <Select value={bookingData.service} onValueChange={(value) => setBookingData({...bookingData, service: value})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a service" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Classic Haircut">Classic Haircut - $35</SelectItem>
-                    <SelectItem value="Beard Trim & Shape">Beard Trim & Shape - $25</SelectItem>
-                    <SelectItem value="Premium Package">Premium Package - $85</SelectItem>
-                    <SelectItem value="Haircut & Style">Haircut & Style - $50</SelectItem>
-                    <SelectItem value="Hair Coloring">Hair Coloring - $120</SelectItem>
-                    <SelectItem value="Facial Treatment">Facial Treatment - $75</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Service *</label>
+                  <Select value={bookingData.service} onValueChange={(value) => setBookingData({...bookingData, service: value})}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select a service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Classic Haircut">Classic Haircut - $35</SelectItem>
+                      <SelectItem value="Beard Trim & Shape">Beard Trim & Shape - $25</SelectItem>
+                      <SelectItem value="Premium Package">Premium Package - $85</SelectItem>
+                      <SelectItem value="Haircut & Style">Haircut & Style - $50</SelectItem>
+                      <SelectItem value="Hair Coloring">Hair Coloring - $120</SelectItem>
+                      <SelectItem value="Facial Treatment">Facial Treatment - $75</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Barber *</label>
+                  <Select value={bookingData.barber} onValueChange={(value) => setBookingData({...bookingData, barber: value})}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select a barber" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Mike Johnson">Mike Johnson</SelectItem>
+                      <SelectItem value="Alex Rodriguez">Alex Rodriguez</SelectItem>
+                      <SelectItem value="Sarah Chen">Sarah Chen</SelectItem>
+                      <SelectItem value="David Kim">David Kim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Products */}
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Package className="w-5 h-5 text-primary" />
+                Products
+              </h3>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Product</label>
+                    <Select onValueChange={(value) => {
+                      const product = mockProducts.find(p => p.name === value);
+                      if (product) {
+                        setBookingData(prev => ({
+                          ...prev,
+                          products: [...prev.products, { ...product, quantity: 1 }]
+                        }));
+                      }
+                    }}>
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Add product" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mockProducts.map((product) => (
+                          <SelectItem key={product.name} value={product.name}>
+                            {product.name} - {product.category} - ${product.price}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Quantity</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="1"
+                      className="h-11"
+                      onChange={(e) => {
+                        // This would update the last added product's quantity
+                        // For simplicity, we'll handle this in a more complete implementation
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full"
+                      onClick={() => {
+                        // Add product logic would go here
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Selected Products List */}
+                {bookingData.products.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Selected Products</label>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {bookingData.products.map((product, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-white rounded border">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{product.name}</div>
+                            <div className="text-xs text-gray-500">{product.category}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">${product.price}</span>
+                            <span className="text-sm text-gray-500">x{product.quantity}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setBookingData(prev => ({
+                                  ...prev,
+                                  products: prev.products.filter((_, i) => i !== index)
+                                }));
+                              }}
+                            >
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-primary" />
+                Pricing & Charges
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Tax (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={bookingData.tax}
+                    onChange={(e) => setBookingData({...bookingData, tax: parseFloat(e.target.value) || 0})}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Service Charges ($)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={bookingData.serviceCharges}
+                    onChange={(e) => setBookingData({...bookingData, serviceCharges: parseFloat(e.target.value) || 0})}
+                    className="h-11"
+                  />
+                </div>
               </div>
 
+              {/* Price Summary */}
+              <div className="mt-4 p-4 bg-white rounded border">
+                <h4 className="font-medium text-gray-900 mb-3">Price Summary</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Service:</span>
+                    <span>${getServicePrice(bookingData.service)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Products:</span>
+                    <span>${bookingData.products.reduce((sum, p) => sum + (p.price * p.quantity), 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Service Charges:</span>
+                    <span>${bookingData.serviceCharges}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Tax ({bookingData.tax}%):</span>
+                    <span>${calculateTax()}</span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between font-semibold">
+                    <span>Total:</span>
+                    <span>${calculateTotal()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-primary" />
+                Booking Status
+              </h3>
+
               <div className="space-y-2">
-                <label className="text-sm font-medium">Barber *</label>
-                <Select value={bookingData.barber} onValueChange={(value) => setBookingData({...bookingData, barber: value})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a barber" />
+                <label className="text-sm font-medium text-gray-700">Status</label>
+                <Select value={bookingData.status} onValueChange={(value) => setBookingData({...bookingData, status: value})}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Mike Johnson">Mike Johnson</SelectItem>
-                    <SelectItem value="Alex Rodriguez">Alex Rodriguez</SelectItem>
-                    <SelectItem value="Sarah Chen">Sarah Chen</SelectItem>
-                    <SelectItem value="David Kim">David Kim</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="rescheduled">Rescheduled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             {/* Date & Time */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Date & Time</h3>
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary" />
+                Date & Time
+              </h3>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Date *</label>
+                  <label className="text-sm font-medium text-gray-700">Date *</label>
                   <Input
                     type="date"
                     value={bookingData.date}
                     onChange={(e) => setBookingData({...bookingData, date: e.target.value})}
+                    className="h-11"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Time *</label>
+                  <label className="text-sm font-medium text-gray-700">Time *</label>
                   <Input
                     type="time"
                     value={bookingData.time}
                     onChange={(e) => setBookingData({...bookingData, time: e.target.value})}
+                    className="h-11"
                   />
                 </div>
               </div>
             </div>
 
+            {/* Invoice Generation */}
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-primary" />
+                Invoice Options
+              </h3>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="generateInvoice" className="text-sm font-medium text-gray-700">
+                    Generate invoice automatically after booking
+                  </label>
+                  <Switch
+                    id="generateInvoice"
+                    checked={bookingData.generateInvoice}
+                    onCheckedChange={(checked) => setBookingData({...bookingData, generateInvoice: checked})}
+                  />
+                </div>
+
+                {bookingData.generateInvoice && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-blue-800">
+                      <Receipt className="w-4 h-4" />
+                      <span className="text-sm font-medium">Invoice will be generated with:</span>
+                    </div>
+                    <ul className="mt-2 text-sm text-blue-700 space-y-1">
+                      <li>• Customer details and booking information</li>
+                      <li>• Itemized services and products</li>
+                      <li>• Tax calculation and total amount</li>
+                      <li>• Payment terms and due date</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Notes */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Notes</label>
-              <Textarea
-                placeholder="Any special requests or notes..."
-                value={bookingData.notes}
-                onChange={(e) => setBookingData({...bookingData, notes: e.target.value})}
-                className="min-h-[80px]"
-              />
+            <div className="space-y-6 p-6 bg-gray-50/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" />
+                Additional Notes
+              </h3>
+
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Any special requests or notes..."
+                  value={bookingData.notes}
+                  onChange={(e) => setBookingData({...bookingData, notes: e.target.value})}
+                  className="min-h-[100px] resize-none"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-6 border-t">
-            <Button variant="outline" onClick={() => setShowBookingDialog(false)}>
+          <div className="flex justify-end gap-4 pt-8 border-t bg-white px-6 py-4 -mx-6 -mb-6">
+            <Button variant="outline" onClick={() => setShowBookingDialog(false)} className="px-6 h-11">
               Cancel
             </Button>
-            <Button onClick={handleSubmitBooking}>
+            <Button onClick={handleSubmitBooking} className="px-6 h-11 bg-primary hover:bg-primary/90">
               Create Booking
             </Button>
           </div>

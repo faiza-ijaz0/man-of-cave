@@ -35,7 +35,9 @@ import {
   Activity,
   Target,
   Award,
-  LogOut
+  LogOut,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -141,7 +143,7 @@ const superAdminNavItems = [
   },
 ];
 
-function SidebarContent({ role, onLogout, onToggle }: Omit<SidebarProps, 'isOpen'>) {
+function SidebarContent({ role, onLogout, onToggle, isCollapsed = false }: Omit<SidebarProps, 'isOpen'> & { isCollapsed?: boolean }) {
   const pathname = usePathname();
   const navItems = role === 'super_admin' ? superAdminNavItems : branchAdminNavItems;
 
@@ -152,18 +154,32 @@ function SidebarContent({ role, onLogout, onToggle }: Omit<SidebarProps, 'isOpen
         <div className="flex items-center justify-between w-full">
           <Link href="/" className="flex items-center gap-2">
             <Scissors className="h-6 w-6 lg:h-8 lg:w-8 text-primary" />
-            <span className="text-lg lg:text-xl font-serif font-bold text-primary">Premium Cuts</span>
+            {!isCollapsed && (
+              <span className="text-lg lg:text-xl font-serif font-bold text-primary">Premium Cuts</span>
+            )}
           </Link>
-          {onToggle && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggle}
-              className="lg:hidden"
-            >
-              <XCircle className="h-5 w-5" />
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {onToggle && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggle}
+                className="lg:hidden"
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
+            )}
+            {onToggle && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggle}
+                className="hidden lg:flex"
+              >
+                {isCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -178,11 +194,12 @@ function SidebarContent({ role, onLogout, onToggle }: Omit<SidebarProps, 'isOpen
                   variant={isActive ? "secondary" : "ghost"}
                   className={cn(
                     "w-full justify-start gap-3 h-12",
+                    isCollapsed && "justify-center px-0",
                     isActive && "bg-secondary text-secondary-foreground"
                   )}
                 >
                   <item.icon className="h-5 w-5" />
-                  {item.title}
+                  {!isCollapsed && item.title}
                 </Button>
               </Link>
             );
@@ -194,11 +211,14 @@ function SidebarContent({ role, onLogout, onToggle }: Omit<SidebarProps, 'isOpen
       <div className="border-t p-4">
         <Button
           variant="outline"
-          className="w-full justify-start gap-3"
+          className={cn(
+            "w-full justify-start gap-3",
+            isCollapsed && "justify-center px-0"
+          )}
           onClick={onLogout}
         >
           <LogOut className="h-5 w-5" />
-          Logout
+          {!isCollapsed && "Logout"}
         </Button>
       </div>
     </div>
@@ -218,10 +238,14 @@ export function AdminSidebar({ role, onLogout, isOpen = true, onToggle }: Sideba
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 transform bg-white border-r transition-transform duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0",
-        isOpen ? "translate-x-0" : "-translate-x-full"
+        "fixed inset-y-0 left-0 z-50 transform bg-white border-r transition-all duration-300 ease-in-out lg:relative lg:z-auto lg:translate-x-0",
+        // Mobile: slide in/out completely
+        isOpen ? "translate-x-0 w-64" : "-translate-x-full w-64",
+        // Desktop: collapse to narrow width
+        "lg:w-16 lg:translate-x-0",
+        isOpen && "lg:w-64"
       )}>
-        <SidebarContent role={role} onLogout={onLogout} onToggle={onToggle} />
+        <SidebarContent role={role} onLogout={onLogout} onToggle={onToggle} isCollapsed={!isOpen} />
       </div>
     </>
   );
