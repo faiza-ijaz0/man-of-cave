@@ -295,11 +295,12 @@ export default function SuperAdminMembership() {
             // BRANCH ADMIN FILTER - Client side filter
             let filteredMemberships = membershipsData;
             
-            if (user?.role === 'admin' && user?.branchId) {
-              filteredMemberships = membershipsData.filter(membership => 
-                membership.branches.includes(user.branchId)
-              );
-            }
+           // Line 298-302 ko replace karein in updated form:
+if (user?.role === 'admin' && user?.branchId) {
+  filteredMemberships = membershipsData.filter(membership => 
+    membership.branches.includes(user.branchId as string)
+  );
+}
             
             setMemberships(filteredMemberships);
           }, (error) => {
