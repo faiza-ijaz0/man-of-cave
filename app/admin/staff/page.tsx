@@ -93,11 +93,11 @@ export default function SuperAdminStaff() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
 
-  // Form states
+  // Form states - AUTO-SET BRANCH FOR BRANCH ADMIN
   const [formData, setFormData] = useState({
     name: '',
     role: '',
-    branch: user?.role === 'admin' ? user.branchName || '' : '',
+    branch: user?.role === 'admin' ? (user.branchName || '') : '',
     email: '',
     phone: '',
     rating: 4.5,
@@ -258,7 +258,8 @@ export default function SuperAdminStaff() {
     setFormData({
       name: '',
       role: '',
-      branch: user?.role === 'admin' ? user.branchName || '' : '',
+      // ✅ AUTO-SET BRANCH ON RESET TOO
+      branch: user?.role === 'admin' ? (user.branchName || '') : '',
       email: '',
       phone: '',
       rating: 4.5,
@@ -284,11 +285,18 @@ export default function SuperAdminStaff() {
     });
   };
 
-  // 🔥 Add Staff to Firebase
+  // 🔥 Add Staff to Firebase - WITH AUTO BRANCH SETTING
   const handleAddStaff = async () => {
-    if (!formData.name.trim() || !formData.email.trim() || !formData.branch.trim()) {
+    if (!formData.name.trim() || !formData.email.trim()) {
       alert('Please fill all required fields');
       return;
+    }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranch = formData.branch;
+    
+    if (user?.role === 'admin' && !formData.branch) {
+      finalBranch = user.branchName || '';
     }
 
     setIsAdding(true);
@@ -296,15 +304,18 @@ export default function SuperAdminStaff() {
       const staffRef = collection(db, 'staff');
       const newStaffData = {
         ...formData,
+        branch: finalBranch, // ✅ Ensure branch is always set
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding staff to branch:', finalBranch); // Debugging ke liye
+      
       await addDoc(staffRef, newStaffData);
       
       setAddDialogOpen(false);
       resetForm();
-      alert('Staff added successfully!');
+      alert(`Staff added successfully to ${finalBranch} branch!`);
       
     } catch (error) {
       console.error("Error adding staff: ", error);
@@ -1070,34 +1081,39 @@ export default function SuperAdminStaff() {
                     <Label htmlFor="branch" className="text-sm font-medium text-gray-700">
                       Branch {user?.role === 'admin' ? '(Auto-selected)' : '*'}
                     </Label>
-                    <Select
-                      value={formData.branch}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, branch: value }))}
-                      disabled={isAdding || user?.role === 'admin'}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {user?.role === 'admin' ? (
-                          // Branch admin ke liye sirf uski branch
-                          <SelectItem value={user.branchName || ''}>
-                            {user.branchName || 'Your Branch'}
-                          </SelectItem>
-                        ) : (
-                          // Super admin ke liye sab branches
-                          <>
-                            {branches.map(branch => (
-                              <SelectItem key={branch.id} value={branch.name}>{branch.name}</SelectItem>
-                            ))}
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {user?.role === 'admin' && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        You can only add staff to your assigned branch: <strong>{user.branchName}</strong>
-                      </p>
+                    
+                    {user?.role === 'admin' ? (
+                      // Branch admin ke liye DISPLAY ONLY field
+                      <div className="mt-2">
+                        <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-md border">
+                          <Building className="w-4 h-4 text-gray-600" />
+                          <span className="font-medium text-gray-900">
+                            {user?.branchName || 'Your Branch'}
+                          </span>
+                          <Badge className="ml-auto bg-blue-100 text-blue-800">
+                            Auto-selected
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          <strong>Note:</strong> Staff will be automatically added to <strong>{user?.branchName}</strong> branch
+                        </p>
+                      </div>
+                    ) : (
+                      // Super admin ke liye normal dropdown
+                      <Select
+                        value={formData.branch}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, branch: value }))}
+                        disabled={isAdding}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branches.map(branch => (
+                            <SelectItem key={branch.id} value={branch.name}>{branch.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                   </div>
 
@@ -1547,36 +1563,40 @@ export default function SuperAdminStaff() {
 
                   <div>
                     <Label htmlFor="edit-branch" className="text-sm font-medium text-gray-700">
-                      Branch {user?.role === 'admin' ? '(Auto-selected)' : '*'}
+                      Branch {user?.role === 'admin' ? '(Cannot change)' : '*'}
                     </Label>
-                    <Select
-                      value={formData.branch}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, branch: value }))}
-                      disabled={isEditing || user?.role === 'admin'}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {user?.role === 'admin' ? (
-                          // Branch admin ke liye sirf uski branch
-                          <SelectItem value={user.branchName || ''}>
-                            {user.branchName || 'Your Branch'}
-                          </SelectItem>
-                        ) : (
-                          // Super admin ke liye sab branches
-                          <>
-                            {branches.map(branch => (
-                              <SelectItem key={branch.id} value={branch.name}>{branch.name}</SelectItem>
-                            ))}
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {user?.role === 'admin' && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Staff can only be in your assigned branch: <strong>{user.branchName}</strong>
-                      </p>
+                    
+                    {user?.role === 'admin' ? (
+                      // Branch admin staff ki branch change nahi kar sakta
+                      <div className="mt-2">
+                        <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-md border">
+                          <Building className="w-4 h-4 text-gray-600" />
+                          <span className="font-medium text-gray-900">
+                            {formData.branch || user?.branchName}
+                          </span>
+                          <Badge className="ml-auto bg-gray-100 text-gray-800">
+                            Fixed
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Branch cannot be changed for existing staff
+                        </p>
+                      </div>
+                    ) : (
+                      <Select
+                        value={formData.branch}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, branch: value }))}
+                        disabled={isEditing}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branches.map(branch => (
+                            <SelectItem key={branch.id} value={branch.name}>{branch.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                   </div>
 

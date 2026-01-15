@@ -106,7 +106,7 @@ export default function SuperAdminProducts() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Form state
+  // Form state - AUTO-SET BRANCH FOR BRANCH ADMIN
   const [productForm, setProductForm] = useState({
     name: '',
     category: '',
@@ -118,7 +118,8 @@ export default function SuperAdminProducts() {
     totalStock: '',
     imageUrl: '',
     status: 'active' as 'active' | 'inactive' | 'low-stock' | 'out-of-stock',
-    branchId: user?.role === 'admin' ? user.branchId || '' : ''
+    branchId: user?.role === 'admin' ? user.branchId || '' : '',
+    branchName: user?.role === 'admin' ? user.branchName || '' : ''
   });
 
   // 🔥 Firebase se real-time products fetch - BRANCH FILTER ADDED
@@ -326,7 +327,7 @@ export default function SuperAdminProducts() {
     };
   }, []);
 
-  // 🔥 Add Product to Firebase
+  // 🔥 Add Product to Firebase - WITH AUTO BRANCH SETTING
   const handleAddProduct = async () => {
     // Validation checks
     if (!productForm.name.trim()) {
@@ -353,8 +354,17 @@ export default function SuperAdminProducts() {
       alert('Please enter a valid stock quantity');
       return;
     }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = productForm.branchId;
+    let finalBranchName = productForm.branchName;
     
-    if (!productForm.branchId) {
+    if (user?.role === 'admin' && !productForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
       alert('Please select a branch');
       return;
     }
@@ -362,10 +372,6 @@ export default function SuperAdminProducts() {
     setIsAdding(true);
     try {
       const productsRef = collection(db, 'products');
-      
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === productForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
       
       // Get selected category
       const selectedCategory = categories.find(cat => cat.id === productForm.categoryId);
@@ -391,8 +397,8 @@ export default function SuperAdminProducts() {
         totalStock: parseInt(productForm.totalStock),
         imageUrl: productForm.imageUrl.trim(),
         status: status,
-        branches: [productForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         rating: 0,
         reviews: 0,
         totalSold: 0,
@@ -401,11 +407,13 @@ export default function SuperAdminProducts() {
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding product to branch:', finalBranchName); // Debugging ke liye
+      
       await addDoc(productsRef, newProductData);
       
       setShowAddProductDialog(false);
       resetProductForm();
-      alert('Product added successfully!');
+      alert(`Product added successfully to ${finalBranchName} branch!`);
       
     } catch (error) {
       console.error("Error adding product: ", error);
@@ -444,8 +452,17 @@ export default function SuperAdminProducts() {
       alert('Please enter a valid stock quantity');
       return;
     }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = productForm.branchId;
+    let finalBranchName = productForm.branchName;
     
-    if (!productForm.branchId) {
+    if (user?.role === 'admin' && !productForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
       alert('Please select a branch');
       return;
     }
@@ -453,10 +470,6 @@ export default function SuperAdminProducts() {
     setIsEditing(true);
     try {
       const productDoc = doc(db, 'products', selectedProduct.id);
-      
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === productForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
       
       // Get selected category
       const selectedCategory = categories.find(cat => cat.id === productForm.categoryId);
@@ -484,8 +497,8 @@ export default function SuperAdminProducts() {
         totalStock: parseInt(productForm.totalStock),
         imageUrl: productForm.imageUrl.trim(),
         status: status,
-        branches: [productForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         updatedAt: serverTimestamp()
       });
       
@@ -585,7 +598,8 @@ export default function SuperAdminProducts() {
       totalStock: '',
       imageUrl: '',
       status: 'active',
-      branchId: user?.role === 'admin' ? user.branchId || '' : ''
+      branchId: user?.role === 'admin' ? user.branchId || '' : '',
+      branchName: user?.role === 'admin' ? user.branchName || '' : ''
     });
   };
 
@@ -602,7 +616,8 @@ export default function SuperAdminProducts() {
       totalStock: product.totalStock.toString(),
       imageUrl: product.imageUrl || '',
       status: product.status,
-      branchId: product.branches[0] || ''
+      branchId: product.branches[0] || (user?.role === 'admin' ? user.branchId || '' : ''),
+      branchName: product.branchNames?.[0] || (user?.role === 'admin' ? user.branchName || '' : '')
     });
     setShowAddProductDialog(true);
   };
@@ -1230,44 +1245,65 @@ export default function SuperAdminProducts() {
                 </div>
               )}
 
-              {/* Branch Dropdown - BRANCH ADMIN FILTER */}
+              {/* Branch Section - AUTO-SELECT FOR BRANCH ADMIN */}
               <div>
                 <Label className="text-xs font-bold uppercase">
                   Branch {user?.role === 'admin' ? '(Auto-selected)' : '*'}
                 </Label>
-                <select
-                  value={productForm.branchId}
-                  onChange={(e) => setProductForm({
-                    ...productForm, 
-                    branchId: e.target.value
-                  })}
-                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                  disabled={isAdding || isEditing || branchesLoading || user?.role === 'admin'}
-                >
-                  {user?.role === 'admin' ? (
-                    // Branch admin ke liye sirf uski branch
-                    <option value={user.branchId || ''}>
-                      {branches.find(b => b.id === user.branchId)?.name || user.branchName || 'Your Branch'}
-                    </option>
-                  ) : (
-                    // Super admin ke liye sab branches
-                    <>
-                      <option value="">Select a branch</option>
-                      {branchesLoading ? (
-                        <option value="" disabled>Loading branches...</option>
-                      ) : branches.length === 0 ? (
-                        <option value="" disabled>No branches available</option>
-                      ) : (
-                        branches.map((branch) => (
-                          <option key={branch.id} value={branch.id}>
-                            {branch.name}
-                            {branch.city && ` (${branch.city})`}
-                          </option>
-                        ))
-                      )}
-                    </>
-                  )}
-                </select>
+                
+                {user?.role === 'admin' ? (
+                  // Branch admin ke liye DISPLAY ONLY field
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-md border">
+                      <Building className="w-4 h-4 text-gray-600" />
+                      <span className="font-medium text-gray-900">
+                        {user?.branchName || 'Your Branch'}
+                      </span>
+                      <Badge className="ml-auto bg-blue-100 text-blue-800">
+                        Auto-selected
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      <strong>Note:</strong> Product will be automatically added to <strong>{user?.branchName}</strong> branch
+                    </p>
+                    {/* Hidden input to store branch ID */}
+                    <input 
+                      type="hidden" 
+                      value={productForm.branchId || user.branchId || ''}
+                      onChange={(e) => setProductForm(prev => ({ ...prev, branchId: e.target.value }))}
+                    />
+                  </div>
+                ) : (
+                  // Super admin ke liye normal dropdown
+                  <select
+                    value={productForm.branchId}
+                    onChange={(e) => {
+                      const selectedBranch = branches.find(b => b.id === e.target.value);
+                      setProductForm({
+                        ...productForm, 
+                        branchId: e.target.value,
+                        branchName: selectedBranch?.name || ''
+                      });
+                    }}
+                    className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                    disabled={isAdding || isEditing || branchesLoading}
+                  >
+                    <option value="">Select a branch</option>
+                    {branchesLoading ? (
+                      <option value="" disabled>Loading branches...</option>
+                    ) : branches.length === 0 ? (
+                      <option value="" disabled>No branches available</option>
+                    ) : (
+                      branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
+                          {branch.city && ` (${branch.city})`}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                )}
+                
                 {user?.role === 'admin' && (
                   <p className="text-xs text-gray-500 mt-1">
                     You can only add products to your assigned branch: <strong>{user.branchName}</strong>
@@ -1319,7 +1355,7 @@ export default function SuperAdminProducts() {
               
               {/* Show which fields are missing */}
               {(!productForm.name.trim() || !productForm.categoryId || !productForm.price || 
-                !productForm.cost || !productForm.totalStock || !productForm.branchId) && (
+                !productForm.cost || !productForm.totalStock) && (
                 <div className="text-xs text-red-500 mt-2">
                   * Required fields must be filled
                 </div>

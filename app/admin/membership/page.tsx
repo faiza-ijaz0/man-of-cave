@@ -199,6 +199,7 @@ export default function SuperAdminMembership() {
     benefits: [''] as string[],
     status: 'active' as 'active' | 'inactive',
     branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+    branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
     tier: 'basic' as 'basic' | 'premium' | 'vip'
   });
 
@@ -212,6 +213,7 @@ export default function SuperAdminMembership() {
     applicableProducts: [] as string[],
     imageUrl: '',
     branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+    branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
     validFrom: '',
     validTo: '',
     usageLimit: '',
@@ -226,6 +228,7 @@ export default function SuperAdminMembership() {
     minimumPurchase: '',
     maximumDiscount: '',
     branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+    branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
     validFrom: '',
     validTo: '',
     usageLimit: '',
@@ -240,6 +243,7 @@ export default function SuperAdminMembership() {
     minimumPurchase: '',
     maximumCashback: '',
     branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+    branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
     validFrom: '',
     validTo: '',
     status: 'active' as 'active' | 'inactive'
@@ -253,6 +257,7 @@ export default function SuperAdminMembership() {
     minimumPoints: '',
     expiryDays: '',
     branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+    branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
     status: 'active' as 'active' | 'inactive'
   });
 
@@ -292,15 +297,14 @@ export default function SuperAdminMembership() {
               });
             });
             
-            // BRANCH ADMIN FILTER - Client side filter
+            // 🔥 BRANCH ADMIN FILTER - Client side filter
             let filteredMemberships = membershipsData;
             
-           // Line 298-302 ko replace karein in updated form:
-if (user?.role === 'admin' && user?.branchId) {
-  filteredMemberships = membershipsData.filter(membership => 
-    membership.branches.includes(user.branchId as string)
-  );
-}
+            if (user?.role === 'admin' && user?.branchId) {
+              filteredMemberships = membershipsData.filter(membership => 
+                membership.branches.includes(user.branchId as string)
+              );
+            }
             
             setMemberships(filteredMemberships);
           }, (error) => {
@@ -346,7 +350,7 @@ if (user?.role === 'admin' && user?.branchId) {
               });
             });
             
-            // BRANCH ADMIN FILTER - Client side filter
+            // 🔥 BRANCH ADMIN FILTER - Client side filter
             let filteredOffers = offersData;
             
             if (user?.role === 'admin' && user?.branchId) {
@@ -397,7 +401,7 @@ if (user?.role === 'admin' && user?.branchId) {
               });
             });
             
-            // BRANCH ADMIN FILTER - Client side filter
+            // 🔥 BRANCH ADMIN FILTER - Client side filter
             let filteredPromoCodes = promoCodesData;
             
             if (user?.role === 'admin' && user?.branchId) {
@@ -446,7 +450,7 @@ if (user?.role === 'admin' && user?.branchId) {
               });
             });
             
-            // BRANCH ADMIN FILTER - Client side filter
+            // 🔥 BRANCH ADMIN FILTER - Client side filter
             let filteredCashback = cashbackData;
             
             if (user?.role === 'admin' && user?.branchId) {
@@ -491,7 +495,7 @@ if (user?.role === 'admin' && user?.branchId) {
               });
             });
             
-            // BRANCH ADMIN FILTER - Client side filter
+            // 🔥 BRANCH ADMIN FILTER - Client side filter
             let filteredLoyalty = loyaltyData;
             
             if (user?.role === 'admin' && user?.branchId) {
@@ -697,6 +701,7 @@ if (user?.role === 'admin' && user?.branchId) {
       benefits: [''],
       status: 'active',
       branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+      branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
       tier: 'basic'
     });
     setOfferForm({
@@ -709,6 +714,7 @@ if (user?.role === 'admin' && user?.branchId) {
       applicableProducts: [],
       imageUrl: '',
       branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+      branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
       validFrom: '',
       validTo: '',
       usageLimit: '',
@@ -722,6 +728,7 @@ if (user?.role === 'admin' && user?.branchId) {
       minimumPurchase: '',
       maximumDiscount: '',
       branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+      branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
       validFrom: '',
       validTo: '',
       usageLimit: '',
@@ -735,6 +742,7 @@ if (user?.role === 'admin' && user?.branchId) {
       minimumPurchase: '',
       maximumCashback: '',
       branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+      branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
       validFrom: '',
       validTo: '',
       status: 'active'
@@ -747,14 +755,29 @@ if (user?.role === 'admin' && user?.branchId) {
       minimumPoints: '',
       expiryDays: '',
       branchId: user?.role === 'admin' && user?.branchId ? user.branchId : '',
+      branchName: user?.role === 'admin' && user?.branchName ? user.branchName : '',
       status: 'active'
     });
   };
 
-  // 🔥 Add functions for each type
+  // 🔥 Add functions for each type WITH AUTO BRANCH SETTING
   const handleAddMembership = async () => {
-    if (!membershipForm.name || !membershipForm.price || !membershipForm.duration || !membershipForm.branchId) {
+    if (!membershipForm.name || !membershipForm.price || !membershipForm.duration) {
       alert('Please fill all required fields');
+      return;
+    }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = membershipForm.branchId;
+    let finalBranchName = membershipForm.branchName;
+    
+    if (user?.role === 'admin' && !membershipForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
+      alert('Please select a branch');
       return;
     }
 
@@ -762,9 +785,11 @@ if (user?.role === 'admin' && user?.branchId) {
     try {
       const membershipsRef = collection(db, 'memberships');
       
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === membershipForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
+      // Get branch name if not already set
+      if (!finalBranchName) {
+        const selectedBranch = branches.find(b => b.id === finalBranchId);
+        finalBranchName = selectedBranch ? selectedBranch.name : '';
+      }
       
       const newMembershipData = {
         name: membershipForm.name.trim(),
@@ -774,19 +799,21 @@ if (user?.role === 'admin' && user?.branchId) {
         benefits: membershipForm.benefits.filter(b => b.trim() !== ''),
         status: membershipForm.status,
         tier: membershipForm.tier,
-        branches: [membershipForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         totalSubscriptions: 0,
         revenue: 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding membership to branch:', finalBranchName); // Debugging ke liye
+      
       await addDoc(membershipsRef, newMembershipData);
       
       setShowAddDialog(false);
       resetForms();
-      alert('Membership added successfully!');
+      alert(`Membership added successfully to ${finalBranchName} branch!`);
       
     } catch (error) {
       console.error("Error adding membership: ", error);
@@ -797,8 +824,22 @@ if (user?.role === 'admin' && user?.branchId) {
   };
 
   const handleAddOffer = async () => {
-    if (!offerForm.title || !offerForm.discountValue || !offerForm.branchId || !offerForm.validFrom || !offerForm.validTo) {
+    if (!offerForm.title || !offerForm.discountValue || !offerForm.validFrom || !offerForm.validTo) {
       alert('Please fill all required fields');
+      return;
+    }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = offerForm.branchId;
+    let finalBranchName = offerForm.branchName;
+    
+    if (user?.role === 'admin' && !offerForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
+      alert('Please select a branch');
       return;
     }
 
@@ -806,9 +847,11 @@ if (user?.role === 'admin' && user?.branchId) {
     try {
       const offersRef = collection(db, 'offers');
       
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === offerForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
+      // Get branch name if not already set
+      if (!finalBranchName) {
+        const selectedBranch = branches.find(b => b.id === finalBranchId);
+        finalBranchName = selectedBranch ? selectedBranch.name : '';
+      }
       
       const newOfferData = {
         title: offerForm.title.trim(),
@@ -819,8 +862,8 @@ if (user?.role === 'admin' && user?.branchId) {
         applicableServices: offerForm.applicableServices,
         applicableProducts: offerForm.applicableProducts,
         imageUrl: offerForm.imageUrl.trim(),
-        branches: [offerForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         validFrom: new Date(offerForm.validFrom),
         validTo: new Date(offerForm.validTo),
         usageLimit: offerForm.usageLimit ? parseInt(offerForm.usageLimit) : null,
@@ -830,11 +873,13 @@ if (user?.role === 'admin' && user?.branchId) {
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding offer to branch:', finalBranchName);
+      
       await addDoc(offersRef, newOfferData);
       
       setShowAddDialog(false);
       resetForms();
-      alert('Offer added successfully!');
+      alert(`Offer added successfully to ${finalBranchName} branch!`);
       
     } catch (error) {
       console.error("Error adding offer: ", error);
@@ -845,8 +890,22 @@ if (user?.role === 'admin' && user?.branchId) {
   };
 
   const handleAddPromoCode = async () => {
-    if (!promoForm.code || !promoForm.discountValue || !promoForm.branchId || !promoForm.validFrom || !promoForm.validTo) {
+    if (!promoForm.code || !promoForm.discountValue || !promoForm.validFrom || !promoForm.validTo) {
       alert('Please fill all required fields');
+      return;
+    }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = promoForm.branchId;
+    let finalBranchName = promoForm.branchName;
+    
+    if (user?.role === 'admin' && !promoForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
+      alert('Please select a branch');
       return;
     }
 
@@ -854,9 +913,11 @@ if (user?.role === 'admin' && user?.branchId) {
     try {
       const promoCodesRef = collection(db, 'promoCodes');
       
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === promoForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
+      // Get branch name if not already set
+      if (!finalBranchName) {
+        const selectedBranch = branches.find(b => b.id === finalBranchId);
+        finalBranchName = selectedBranch ? selectedBranch.name : '';
+      }
       
       const newPromoData = {
         code: promoForm.code.trim().toUpperCase(),
@@ -865,8 +926,8 @@ if (user?.role === 'admin' && user?.branchId) {
         discountValue: parseFloat(promoForm.discountValue),
         minimumPurchase: promoForm.minimumPurchase ? parseFloat(promoForm.minimumPurchase) : null,
         maximumDiscount: promoForm.maximumDiscount ? parseFloat(promoForm.maximumDiscount) : null,
-        branches: [promoForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         validFrom: new Date(promoForm.validFrom),
         validTo: new Date(promoForm.validTo),
         usageLimit: promoForm.usageLimit ? parseInt(promoForm.usageLimit) : null,
@@ -876,11 +937,13 @@ if (user?.role === 'admin' && user?.branchId) {
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding promo code to branch:', finalBranchName);
+      
       await addDoc(promoCodesRef, newPromoData);
       
       setShowAddDialog(false);
       resetForms();
-      alert('Promo code added successfully!');
+      alert(`Promo code added successfully to ${finalBranchName} branch!`);
       
     } catch (error) {
       console.error("Error adding promo code: ", error);
@@ -891,8 +954,22 @@ if (user?.role === 'admin' && user?.branchId) {
   };
 
   const handleAddCashbackProgram = async () => {
-    if (!cashbackForm.name || !cashbackForm.cashbackValue || !cashbackForm.branchId || !cashbackForm.validFrom || !cashbackForm.validTo) {
+    if (!cashbackForm.name || !cashbackForm.cashbackValue || !cashbackForm.validFrom || !cashbackForm.validTo) {
       alert('Please fill all required fields');
+      return;
+    }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = cashbackForm.branchId;
+    let finalBranchName = cashbackForm.branchName;
+    
+    if (user?.role === 'admin' && !cashbackForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
+      alert('Please select a branch');
       return;
     }
 
@@ -900,9 +977,11 @@ if (user?.role === 'admin' && user?.branchId) {
     try {
       const cashbackRef = collection(db, 'cashbackPrograms');
       
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === cashbackForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
+      // Get branch name if not already set
+      if (!finalBranchName) {
+        const selectedBranch = branches.find(b => b.id === finalBranchId);
+        finalBranchName = selectedBranch ? selectedBranch.name : '';
+      }
       
       const newCashbackData = {
         name: cashbackForm.name.trim(),
@@ -911,8 +990,8 @@ if (user?.role === 'admin' && user?.branchId) {
         cashbackValue: parseFloat(cashbackForm.cashbackValue),
         minimumPurchase: cashbackForm.minimumPurchase ? parseFloat(cashbackForm.minimumPurchase) : null,
         maximumCashback: cashbackForm.maximumCashback ? parseFloat(cashbackForm.maximumCashback) : null,
-        branches: [cashbackForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         validFrom: new Date(cashbackForm.validFrom),
         validTo: new Date(cashbackForm.validTo),
         status: cashbackForm.status,
@@ -920,11 +999,13 @@ if (user?.role === 'admin' && user?.branchId) {
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding cashback program to branch:', finalBranchName);
+      
       await addDoc(cashbackRef, newCashbackData);
       
       setShowAddDialog(false);
       resetForms();
-      alert('Cashback program added successfully!');
+      alert(`Cashback program added successfully to ${finalBranchName} branch!`);
       
     } catch (error) {
       console.error("Error adding cashback program: ", error);
@@ -935,8 +1016,22 @@ if (user?.role === 'admin' && user?.branchId) {
   };
 
   const handleAddLoyaltyProgram = async () => {
-    if (!loyaltyForm.name || !loyaltyForm.pointsPerDollar || !loyaltyForm.redemptionRate || !loyaltyForm.minimumPoints || !loyaltyForm.branchId) {
+    if (!loyaltyForm.name || !loyaltyForm.pointsPerDollar || !loyaltyForm.redemptionRate || !loyaltyForm.minimumPoints) {
       alert('Please fill all required fields');
+      return;
+    }
+
+    // 🔥 IMPORTANT: Ensure branch is set for branch admin
+    let finalBranchId = loyaltyForm.branchId;
+    let finalBranchName = loyaltyForm.branchName;
+    
+    if (user?.role === 'admin' && !loyaltyForm.branchId) {
+      finalBranchId = user.branchId || '';
+      finalBranchName = user.branchName || '';
+    }
+
+    if (!finalBranchId) {
+      alert('Please select a branch');
       return;
     }
 
@@ -944,9 +1039,11 @@ if (user?.role === 'admin' && user?.branchId) {
     try {
       const loyaltyRef = collection(db, 'loyaltyPoints');
       
-      // Get selected branch
-      const selectedBranch = branches.find(b => b.id === loyaltyForm.branchId);
-      const branchName = selectedBranch ? selectedBranch.name : '';
+      // Get branch name if not already set
+      if (!finalBranchName) {
+        const selectedBranch = branches.find(b => b.id === finalBranchId);
+        finalBranchName = selectedBranch ? selectedBranch.name : '';
+      }
       
       const newLoyaltyData = {
         name: loyaltyForm.name.trim(),
@@ -955,18 +1052,20 @@ if (user?.role === 'admin' && user?.branchId) {
         redemptionRate: parseFloat(loyaltyForm.redemptionRate),
         minimumPoints: parseInt(loyaltyForm.minimumPoints),
         expiryDays: loyaltyForm.expiryDays ? parseInt(loyaltyForm.expiryDays) : 365,
-        branches: [loyaltyForm.branchId],
-        branchNames: branchName ? [branchName] : [],
+        branches: [finalBranchId], // ✅ Auto-set branch
+        branchNames: finalBranchName ? [finalBranchName] : [],
         status: loyaltyForm.status,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
 
+      console.log('Adding loyalty program to branch:', finalBranchName);
+      
       await addDoc(loyaltyRef, newLoyaltyData);
       
       setShowAddDialog(false);
       resetForms();
-      alert('Loyalty program added successfully!');
+      alert(`Loyalty program added successfully to ${finalBranchName} branch!`);
       
     } catch (error) {
       console.error("Error adding loyalty program: ", error);
@@ -985,11 +1084,21 @@ if (user?.role === 'admin' && user?.branchId) {
       let collectionName = '';
       let updateData: any = {};
 
+      // 🔥 IMPORTANT: Get branch info for branch admin
+      let finalBranchId = '';
+      let finalBranchName = '';
+
       switch (dialogType) {
         case 'membership':
           collectionName = 'memberships';
-          const selectedBranch = branches.find(b => b.id === membershipForm.branchId);
-          const branchName = selectedBranch ? selectedBranch.name : '';
+          finalBranchId = membershipForm.branchId;
+          finalBranchName = membershipForm.branchName;
+          
+          if (user?.role === 'admin' && !membershipForm.branchId) {
+            finalBranchId = user.branchId || '';
+            finalBranchName = user.branchName || '';
+          }
+
           updateData = {
             name: membershipForm.name.trim(),
             description: membershipForm.description.trim(),
@@ -998,16 +1107,22 @@ if (user?.role === 'admin' && user?.branchId) {
             benefits: membershipForm.benefits.filter(b => b.trim() !== ''),
             status: membershipForm.status,
             tier: membershipForm.tier,
-            branches: [membershipForm.branchId],
-            branchNames: branchName ? [branchName] : [],
+            branches: [finalBranchId], // ✅ Auto-set branch
+            branchNames: finalBranchName ? [finalBranchName] : [],
             updatedAt: serverTimestamp()
           };
           break;
 
         case 'offer':
           collectionName = 'offers';
-          const offerBranch = branches.find(b => b.id === offerForm.branchId);
-          const offerBranchName = offerBranch ? offerBranch.name : '';
+          finalBranchId = offerForm.branchId;
+          finalBranchName = offerForm.branchName;
+          
+          if (user?.role === 'admin' && !offerForm.branchId) {
+            finalBranchId = user.branchId || '';
+            finalBranchName = user.branchName || '';
+          }
+
           updateData = {
             title: offerForm.title.trim(),
             description: offerForm.description.trim(),
@@ -1017,8 +1132,8 @@ if (user?.role === 'admin' && user?.branchId) {
             applicableServices: offerForm.applicableServices,
             applicableProducts: offerForm.applicableProducts,
             imageUrl: offerForm.imageUrl.trim(),
-            branches: [offerForm.branchId],
-            branchNames: offerBranchName ? [offerBranchName] : [],
+            branches: [finalBranchId], // ✅ Auto-set branch
+            branchNames: finalBranchName ? [finalBranchName] : [],
             validFrom: new Date(offerForm.validFrom),
             validTo: new Date(offerForm.validTo),
             usageLimit: offerForm.usageLimit ? parseInt(offerForm.usageLimit) : null,
@@ -1029,8 +1144,14 @@ if (user?.role === 'admin' && user?.branchId) {
 
         case 'promo':
           collectionName = 'promoCodes';
-          const promoBranch = branches.find(b => b.id === promoForm.branchId);
-          const promoBranchName = promoBranch ? promoBranch.name : '';
+          finalBranchId = promoForm.branchId;
+          finalBranchName = promoForm.branchName;
+          
+          if (user?.role === 'admin' && !promoForm.branchId) {
+            finalBranchId = user.branchId || '';
+            finalBranchName = user.branchName || '';
+          }
+
           updateData = {
             code: promoForm.code.trim().toUpperCase(),
             description: promoForm.description.trim(),
@@ -1038,8 +1159,8 @@ if (user?.role === 'admin' && user?.branchId) {
             discountValue: parseFloat(promoForm.discountValue),
             minimumPurchase: promoForm.minimumPurchase ? parseFloat(promoForm.minimumPurchase) : null,
             maximumDiscount: promoForm.maximumDiscount ? parseFloat(promoForm.maximumDiscount) : null,
-            branches: [promoForm.branchId],
-            branchNames: promoBranchName ? [promoBranchName] : [],
+            branches: [finalBranchId], // ✅ Auto-set branch
+            branchNames: finalBranchName ? [finalBranchName] : [],
             validFrom: new Date(promoForm.validFrom),
             validTo: new Date(promoForm.validTo),
             usageLimit: promoForm.usageLimit ? parseInt(promoForm.usageLimit) : null,
@@ -1050,8 +1171,14 @@ if (user?.role === 'admin' && user?.branchId) {
 
         case 'cashback':
           collectionName = 'cashbackPrograms';
-          const cashbackBranch = branches.find(b => b.id === cashbackForm.branchId);
-          const cashbackBranchName = cashbackBranch ? cashbackBranch.name : '';
+          finalBranchId = cashbackForm.branchId;
+          finalBranchName = cashbackForm.branchName;
+          
+          if (user?.role === 'admin' && !cashbackForm.branchId) {
+            finalBranchId = user.branchId || '';
+            finalBranchName = user.branchName || '';
+          }
+
           updateData = {
             name: cashbackForm.name.trim(),
             description: cashbackForm.description.trim(),
@@ -1059,8 +1186,8 @@ if (user?.role === 'admin' && user?.branchId) {
             cashbackValue: parseFloat(cashbackForm.cashbackValue),
             minimumPurchase: cashbackForm.minimumPurchase ? parseFloat(cashbackForm.minimumPurchase) : null,
             maximumCashback: cashbackForm.maximumCashback ? parseFloat(cashbackForm.maximumCashback) : null,
-            branches: [cashbackForm.branchId],
-            branchNames: cashbackBranchName ? [cashbackBranchName] : [],
+            branches: [finalBranchId], // ✅ Auto-set branch
+            branchNames: finalBranchName ? [finalBranchName] : [],
             validFrom: new Date(cashbackForm.validFrom),
             validTo: new Date(cashbackForm.validTo),
             status: cashbackForm.status,
@@ -1070,8 +1197,14 @@ if (user?.role === 'admin' && user?.branchId) {
 
         case 'loyalty':
           collectionName = 'loyaltyPoints';
-          const loyaltyBranch = branches.find(b => b.id === loyaltyForm.branchId);
-          const loyaltyBranchName = loyaltyBranch ? loyaltyBranch.name : '';
+          finalBranchId = loyaltyForm.branchId;
+          finalBranchName = loyaltyForm.branchName;
+          
+          if (user?.role === 'admin' && !loyaltyForm.branchId) {
+            finalBranchId = user.branchId || '';
+            finalBranchName = user.branchName || '';
+          }
+
           updateData = {
             name: loyaltyForm.name.trim(),
             description: loyaltyForm.description.trim(),
@@ -1079,8 +1212,8 @@ if (user?.role === 'admin' && user?.branchId) {
             redemptionRate: parseFloat(loyaltyForm.redemptionRate),
             minimumPoints: parseInt(loyaltyForm.minimumPoints),
             expiryDays: loyaltyForm.expiryDays ? parseInt(loyaltyForm.expiryDays) : 365,
-            branches: [loyaltyForm.branchId],
-            branchNames: loyaltyBranchName ? [loyaltyBranchName] : [],
+            branches: [finalBranchId], // ✅ Auto-set branch
+            branchNames: finalBranchName ? [finalBranchName] : [],
             status: loyaltyForm.status,
             updatedAt: serverTimestamp()
           };
@@ -1173,7 +1306,8 @@ if (user?.role === 'admin' && user?.branchId) {
           duration: item.duration.toString(),
           benefits: item.benefits.length > 0 ? item.benefits : [''],
           status: item.status,
-          branchId: item.branches[0] || '',
+          branchId: item.branches[0] || (user?.role === 'admin' ? user.branchId || '' : ''),
+          branchName: item.branchNames?.[0] || (user?.role === 'admin' ? user.branchName || '' : ''),
           tier: item.tier || 'basic'
         });
         break;
@@ -1187,7 +1321,8 @@ if (user?.role === 'admin' && user?.branchId) {
           applicableServices: item.applicableServices || [],
           applicableProducts: item.applicableProducts || [],
           imageUrl: item.imageUrl || '',
-          branchId: item.branches[0] || '',
+          branchId: item.branches[0] || (user?.role === 'admin' ? user.branchId || '' : ''),
+          branchName: item.branchNames?.[0] || (user?.role === 'admin' ? user.branchName || '' : ''),
           validFrom: item.validFrom.toISOString().split('T')[0],
           validTo: item.validTo.toISOString().split('T')[0],
           usageLimit: item.usageLimit?.toString() || '',
@@ -1202,7 +1337,8 @@ if (user?.role === 'admin' && user?.branchId) {
           discountValue: item.discountValue.toString(),
           minimumPurchase: item.minimumPurchase?.toString() || '',
           maximumDiscount: item.maximumDiscount?.toString() || '',
-          branchId: item.branches[0] || '',
+          branchId: item.branches[0] || (user?.role === 'admin' ? user.branchId || '' : ''),
+          branchName: item.branchNames?.[0] || (user?.role === 'admin' ? user.branchName || '' : ''),
           validFrom: item.validFrom.toISOString().split('T')[0],
           validTo: item.validTo.toISOString().split('T')[0],
           usageLimit: item.usageLimit?.toString() || '',
@@ -1217,7 +1353,8 @@ if (user?.role === 'admin' && user?.branchId) {
           cashbackValue: item.cashbackValue.toString(),
           minimumPurchase: item.minimumPurchase?.toString() || '',
           maximumCashback: item.maximumCashback?.toString() || '',
-          branchId: item.branches[0] || '',
+          branchId: item.branches[0] || (user?.role === 'admin' ? user.branchId || '' : ''),
+          branchName: item.branchNames?.[0] || (user?.role === 'admin' ? user.branchName || '' : ''),
           validFrom: item.validFrom.toISOString().split('T')[0],
           validTo: item.validTo.toISOString().split('T')[0],
           status: item.status
@@ -1231,7 +1368,8 @@ if (user?.role === 'admin' && user?.branchId) {
           redemptionRate: item.redemptionRate.toString(),
           minimumPoints: item.minimumPoints.toString(),
           expiryDays: item.expiryDays?.toString() || '365',
-          branchId: item.branches[0] || '',
+          branchId: item.branches[0] || (user?.role === 'admin' ? user.branchId || '' : ''),
+          branchName: item.branchNames?.[0] || (user?.role === 'admin' ? user.branchName || '' : ''),
           status: item.status
         });
         break;
@@ -2795,48 +2933,79 @@ if (user?.role === 'admin' && user?.branchId) {
               <Label className="text-xs font-bold uppercase">
                 Select Branch *
               </Label>
-              <select
-                value={
-                  dialogType === 'membership' ? membershipForm.branchId :
-                  dialogType === 'offer' ? offerForm.branchId :
-                  dialogType === 'promo' ? promoForm.branchId :
-                  dialogType === 'cashback' ? cashbackForm.branchId :
-                  loyaltyForm.branchId
-                }
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (dialogType === 'membership') setMembershipForm({...membershipForm, branchId: value});
-                  if (dialogType === 'offer') setOfferForm({...offerForm, branchId: value});
-                  if (dialogType === 'promo') setPromoForm({...promoForm, branchId: value});
-                  if (dialogType === 'cashback') setCashbackForm({...cashbackForm, branchId: value});
-                  if (dialogType === 'loyalty') setLoyaltyForm({...loyaltyForm, branchId: value});
-                }}
-                className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                disabled={isAdding || isEditing || (user?.role === 'admin') || branchesLoading}
-              >
-                {user?.role === 'admin' && user?.branchName ? (
-                  // Branch admin ke liye sirf uski branch
-                  <option value={user.branchId}>
-                    {user.branchName} (Auto-selected)
-                  </option>
-                ) : (
-                  <>
-                    <option value="">Select a branch</option>
-                    {branchesLoading ? (
-                      <option value="" disabled>Loading branches...</option>
-                    ) : branches.length === 0 ? (
-                      <option value="" disabled>No branches available</option>
-                    ) : (
-                      branches.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                          {branch.city && ` (${branch.city})`}
-                        </option>
-                      ))
-                    )}
-                  </>
-                )}
-              </select>
+              
+              {user?.role === 'admin' ? (
+                // Branch admin ke liye DISPLAY ONLY field
+                <div className="mt-2">
+                  <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-md border">
+                    <Building className="w-4 h-4 text-gray-600" />
+                    <span className="font-medium text-gray-900">
+                      {user?.branchName || 'Your Branch'}
+                    </span>
+                    <Badge className="ml-auto bg-blue-100 text-blue-800">
+                      Auto-selected
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    <strong>Note:</strong> {dialogType.charAt(0).toUpperCase() + dialogType.slice(1)} will be automatically added to <strong>{user?.branchName}</strong> branch
+                  </p>
+                  {/* Hidden input to store branch ID */}
+                  <input 
+                    type="hidden" 
+                    value={
+                      dialogType === 'membership' ? membershipForm.branchId || user.branchId || '' :
+                      dialogType === 'offer' ? offerForm.branchId || user.branchId || '' :
+                      dialogType === 'promo' ? promoForm.branchId || user.branchId || '' :
+                      dialogType === 'cashback' ? cashbackForm.branchId || user.branchId || '' :
+                      loyaltyForm.branchId || user.branchId || ''
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (dialogType === 'membership') setMembershipForm(prev => ({ ...prev, branchId: value }));
+                      if (dialogType === 'offer') setOfferForm(prev => ({ ...prev, branchId: value }));
+                      if (dialogType === 'promo') setPromoForm(prev => ({ ...prev, branchId: value }));
+                      if (dialogType === 'cashback') setCashbackForm(prev => ({ ...prev, branchId: value }));
+                      if (dialogType === 'loyalty') setLoyaltyForm(prev => ({ ...prev, branchId: value }));
+                    }}
+                  />
+                </div>
+              ) : (
+                // Super admin ke liye normal dropdown
+                <select
+                  value={
+                    dialogType === 'membership' ? membershipForm.branchId :
+                    dialogType === 'offer' ? offerForm.branchId :
+                    dialogType === 'promo' ? promoForm.branchId :
+                    dialogType === 'cashback' ? cashbackForm.branchId :
+                    loyaltyForm.branchId
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (dialogType === 'membership') setMembershipForm({...membershipForm, branchId: value});
+                    if (dialogType === 'offer') setOfferForm({...offerForm, branchId: value});
+                    if (dialogType === 'promo') setPromoForm({...promoForm, branchId: value});
+                    if (dialogType === 'cashback') setCashbackForm({...cashbackForm, branchId: value});
+                    if (dialogType === 'loyalty') setLoyaltyForm({...loyaltyForm, branchId: value});
+                  }}
+                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  disabled={isAdding || isEditing || branchesLoading}
+                >
+                  <option value="">Select a branch</option>
+                  {branchesLoading ? (
+                    <option value="" disabled>Loading branches...</option>
+                  ) : branches.length === 0 ? (
+                    <option value="" disabled>No branches available</option>
+                  ) : (
+                    branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                        {branch.city && ` (${branch.city})`}
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+              
               {user?.role === 'admin' && (
                 <p className="text-xs text-gray-500 mt-1">
                   You can only add to your assigned branch: <strong>{user.branchName}</strong>

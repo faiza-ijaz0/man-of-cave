@@ -340,7 +340,7 @@ export default function Home() {
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
           <p className="text-lg font-semibold text-primary">Loading premium experience...</p>
-          <p className="text-sm text-gray-500">Fetching real-time data from Firebase</p>
+         
         </div>
       </div>
     );

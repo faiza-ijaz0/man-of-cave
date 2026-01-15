@@ -101,6 +101,12 @@ const branchAdminNavItems = [
     href: '/admin/membership',
     icon: Award,
   },
+   {
+    title: 'Booking Calender',
+    href: '/admin/bookingcalender',
+    icon: Award,
+  },
+   
   {
     title: 'Expenses',
     href: '/admin/expenses',
