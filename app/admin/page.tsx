@@ -689,16 +689,13 @@ export default function SuperAdminDashboard() {
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="text-center space-y-6">
           <div className="relative">
-            <div className="h-24 w-24 rounded-full border-4 border-gray-200"></div>
-            <div className="absolute top-0 left-0 h-24 w-24 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+            
           </div>
           <div className="space-y-2">
             <h3 className="text-xl font-bold text-gray-900 font-serif">
               Loading Dashboard
             </h3>
-            <p className="text-sm text-gray-500">
-              Fetching real-time data from database...
-            </p>
+           
           </div>
           <div className="w-48 mx-auto">
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
