@@ -8,7 +8,7 @@ import {
   Scissors, MapPin, Star, Clock, Phone, Mail, Award, Users, 
   Calendar, ChevronRight, ShoppingBag, Ticket, ArrowRight,
   Quote, Instagram, CheckCircle2, ShieldCheck, Zap, Building,
-  Loader2, TrendingUp, Package, DollarSign, RefreshCw,
+  TrendingUp, Package, DollarSign, RefreshCw,
   Crown, Gem, Shield, Sparkles, Check, UserCheck
 } from "lucide-react";
 import { Header } from "@/components/shared/Header";
@@ -29,9 +29,7 @@ import {
   orderBy, 
   limit,
   DocumentData,
-  QueryDocumentSnapshot,
-  where,
-  Timestamp
+  QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -97,7 +95,6 @@ interface Branch {
   status: string;
 }
 
-// New Offer Interface
 interface Offer {
   id: string;
   title: string;
@@ -119,7 +116,6 @@ interface Offer {
   updatedAt: Date;
 }
 
-// New Membership Interface
 interface Membership {
   id: string;
   name: string;
@@ -138,7 +134,6 @@ interface Membership {
 }
 
 interface HomeStore {
-  // Data
   services: Service[];
   products: Product[];
   staff: StaffMember[];
@@ -154,11 +149,9 @@ interface HomeStore {
     totalMemberships: number;
   };
   
-  // Loading states
-  isLoading: boolean;
+  hasInitialLoad: boolean;
   error: string | null;
   
-  // Actions
   fetchHomeData: () => Promise<void>;
   fetchServices: () => Promise<void>;
   fetchProducts: () => Promise<void>;
@@ -170,7 +163,6 @@ interface HomeStore {
 }
 
 const useHomeStore = create<HomeStore>((set, get) => ({
-  // Initial state
   services: [],
   products: [],
   staff: [],
@@ -185,12 +177,11 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     totalOffers: 0,
     totalMemberships: 0,
   },
-  isLoading: false,
+  hasInitialLoad: false,
   error: null,
 
-  // Fetch all home data
   fetchHomeData: async () => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       await Promise.all([
         get().fetchServices(),
@@ -201,17 +192,16 @@ const useHomeStore = create<HomeStore>((set, get) => ({
         get().fetchMemberships()
       ]);
       get().calculateStats();
-      set({ isLoading: false });
+      set({ hasInitialLoad: true });
     } catch (error) {
       console.error('Error fetching home data:', error);
       set({ 
         error: 'Failed to load data. Please try again.', 
-        isLoading: false 
+        hasInitialLoad: true 
       });
     }
   },
 
-  // Fetch services
   fetchServices: async () => {
     try {
       const servicesRef = collection(db, 'services');
@@ -245,7 +235,6 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     }
   },
 
-  // Fetch products
   fetchProducts: async () => {
     try {
       const productsRef = collection(db, 'products');
@@ -282,7 +271,6 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     }
   },
 
-  // Fetch staff
   fetchStaff: async () => {
     try {
       const staffRef = collection(db, 'staff');
@@ -310,7 +298,6 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     }
   },
 
-  // Fetch branches
   fetchBranches: async () => {
     try {
       const branchesRef = collection(db, 'branches');
@@ -340,18 +327,10 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     }
   },
 
-  // Fetch offers from Firebase - FIXED VERSION (No index error)
   fetchOffers: async () => {
     try {
       const offersRef = collection(db, 'offers');
-      
-      // SIMPLE QUERY - No complex where clause to avoid index error
-      const q = query(
-        offersRef, 
-        orderBy('createdAt', 'desc'), 
-        limit(12) // Get extra for client-side filtering
-      );
-      
+      const q = query(offersRef, orderBy('createdAt', 'desc'), limit(12));
       const querySnapshot = await getDocs(q);
       
       const offersData: Offer[] = [];
@@ -360,13 +339,11 @@ const useHomeStore = create<HomeStore>((set, get) => ({
       querySnapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
         const data = doc.data();
         
-        // Convert Firestore timestamps to Date objects
         const validFrom = data.validFrom?.toDate() || new Date();
         const validTo = data.validTo?.toDate() || new Date();
         const createdAt = data.createdAt?.toDate() || new Date();
         const updatedAt = data.updatedAt?.toDate() || new Date();
         
-        // Client-side filtering for ACTIVE and NOT EXPIRED offers
         const isActive = data.status === 'active';
         const isNotExpired = now <= validTo;
         
@@ -394,9 +371,7 @@ const useHomeStore = create<HomeStore>((set, get) => ({
         }
       });
       
-      // Take only first 8 active offers
       const finalOffers = offersData.slice(0, 8);
-      
       set({ offers: finalOffers });
     } catch (error) {
       console.error('Error fetching offers:', error);
@@ -404,18 +379,10 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     }
   },
 
-  // Fetch memberships from Firebase
   fetchMemberships: async () => {
     try {
       const membershipsRef = collection(db, 'memberships');
-      
-      // Simple query to avoid index error
-      const q = query(
-        membershipsRef, 
-        orderBy('createdAt', 'desc'), 
-        limit(8)
-      );
-      
+      const q = query(membershipsRef, orderBy('createdAt', 'desc'), limit(8));
       const querySnapshot = await getDocs(q);
       
       const membershipsData: Membership[] = [];
@@ -423,11 +390,9 @@ const useHomeStore = create<HomeStore>((set, get) => ({
       querySnapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
         const data = doc.data();
         
-        // Convert Firestore timestamps to Date objects
         const createdAt = data.createdAt?.toDate() || new Date();
         const updatedAt = data.updatedAt?.toDate() || new Date();
         
-        // Client-side filtering for ACTIVE memberships
         const isActive = data.status === 'active';
         
         if (isActive) {
@@ -457,7 +422,6 @@ const useHomeStore = create<HomeStore>((set, get) => ({
     }
   },
 
-  // Calculate statistics
   calculateStats: () => {
     const state = get();
     set({
@@ -483,7 +447,7 @@ export default function Home() {
     offers,
     memberships,
     stats,
-    isLoading, 
+    hasInitialLoad,
     error, 
     fetchHomeData 
   } = useHomeStore();
@@ -492,7 +456,6 @@ export default function Home() {
     fetchHomeData();
   }, [fetchHomeData]);
 
-  // Calculate real-time stats
   const totalActiveServices = services.filter(s => s.status === 'active').length;
   const totalActiveProducts = products.filter(p => p.status === 'active').length;
   const totalActiveStaff = staff.filter(s => s.status === 'active').length;
@@ -500,12 +463,10 @@ export default function Home() {
   const totalActiveOffers = offers.length;
   const totalActiveMemberships = memberships.length;
 
-  // Calculate total revenue
   const totalServicesRevenue = services.reduce((sum, service) => sum + service.revenue, 0);
   const totalProductsRevenue = products.reduce((sum, product) => sum + product.revenue, 0);
   const totalRevenue = totalServicesRevenue + totalProductsRevenue;
 
-  // Function to get offer badge color based on type
   const getOfferBadgeColor = (offerType: string) => {
     switch (offerType) {
       case 'service': return 'bg-blue-500 text-white';
@@ -515,7 +476,6 @@ export default function Home() {
     }
   };
 
-  // Function to format discount display
   const formatDiscount = (offer: Offer) => {
     if (offer.discountType === 'percentage') {
       return `${offer.discountValue}% OFF`;
@@ -524,7 +484,6 @@ export default function Home() {
     }
   };
 
-  // Function to get offer background color
   const getOfferBgColor = (offerType: string) => {
     switch (offerType) {
       case 'service': return 'bg-blue-600';
@@ -534,7 +493,6 @@ export default function Home() {
     }
   };
 
-  // Function to get membership tier color
   const getMembershipTierColor = (tier: string) => {
     switch (tier) {
       case 'basic': return 'bg-gray-600';
@@ -545,7 +503,6 @@ export default function Home() {
     }
   };
 
-  // Function to get membership tier icon
   const getMembershipTierIcon = (tier: string) => {
     switch (tier) {
       case 'basic': return Shield;
@@ -556,7 +513,6 @@ export default function Home() {
     }
   };
 
-  // Function to format duration
   const formatDuration = (days: number) => {
     if (days >= 365) {
       const years = Math.floor(days / 365);
@@ -569,14 +525,11 @@ export default function Home() {
     }
   };
 
-  // Function to get first branch name for membership
   const getFirstBranchName = (membership: Membership) => {
-    // If membership has branchNames array and it's not empty, use first branch name
     if (membership.branchNames && membership.branchNames.length > 0) {
       return membership.branchNames[0];
     }
     
-    // If no branchNames but has branches array, try to find branch name from branches collection
     if (membership.branches && membership.branches.length > 0) {
       const branchId = membership.branches[0];
       const branch = branches.find(b => b.id === branchId);
@@ -586,7 +539,6 @@ export default function Home() {
     return 'All Branches';
   };
 
-  // Function to get branch count text
   const getBranchCountText = (membership: Membership) => {
     if (membership.branches && membership.branches.length > 0) {
       return `${membership.branches.length} ${membership.branches.length === 1 ? 'Branch' : 'Branches'}`;
@@ -599,23 +551,12 @@ export default function Home() {
     return 'All Branches';
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#fcfcfc] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
-          <p className="text-lg font-semibold text-primary">Loading premium experience...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
+  if (error && hasInitialLoad) {
     return (
       <div className="min-h-screen bg-[#fcfcfc] flex items-center justify-center">
         <div className="text-center space-y-4 max-w-md">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-            <Loader2 className="w-8 h-8 text-red-600 animate-spin" />
+            <RefreshCw className="w-8 h-8 text-red-600" />
           </div>
           <h3 className="text-2xl font-serif font-bold text-primary">Error Loading Data</h3>
           <p className="text-gray-600">{error}</p>
@@ -635,7 +576,6 @@ export default function Home() {
     <div className="min-h-screen bg-[#fcfcfc]">
       <Header />
 
-      {/* Refresh Button */}
       <div className="fixed bottom-6 right-6 z-50">
         <Button
           onClick={fetchHomeData}
@@ -646,7 +586,6 @@ export default function Home() {
         </Button>
       </div>
 
-      {/* Hero Section */}
       <section className="relative h-[85vh] flex items-center justify-center overflow-hidden mt-[3.5rem]">
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105 animate-slow-zoom"
@@ -690,7 +629,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Trust Bar - Real-time Data */}
       <section className="py-10 border-b border-gray-100 bg-white relative z-20 -mt-10 mx-4 md:mx-10 rounded-2xl shadow-2xl">
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
@@ -743,7 +681,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Featured In Section */}
       <section className="py-12 bg-white border-b border-gray-50">
         <div className="max-w-7xl mx-auto px-4">
           <p className="text-center text-[10px] uppercase tracking-[0.4em] text-muted-foreground mb-8 font-bold">As Featured In</p>
@@ -755,7 +692,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ==================== MEMBER REWARDS SECTION ==================== */}
       <section className="py-20 px-4 bg-gray-50/50 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03] pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
@@ -800,7 +736,6 @@ export default function Home() {
                         "p-8 rounded-3xl text-white relative overflow-hidden group cursor-pointer transition-all duration-500 hover:shadow-[0_20px_40px_rgba(0,0,0,0.1)] hover:-translate-y-2",
                         offerBgColor
                       )}>
-                        {/* Usage limit badge */}
                         {offer.usageLimit && (
                           <div className="absolute top-4 left-4 bg-black/30 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1 rounded-full z-20">
                             {offer.usedCount}/{offer.usageLimit} USED
@@ -811,7 +746,6 @@ export default function Home() {
                           <Ticket className="w-32 h-32 rotate-12" />
                         </div>
                         
-                        {/* Offer Image Background */}
                         {offer.imageUrl && (
                           <div className="absolute inset-0 opacity-20">
                             <img 
@@ -890,7 +824,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ==================== EXCLUSIVE MEMBERSHIPS SECTION ==================== */}
       <section className="py-20 px-4 bg-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diamond.png')] opacity-[0.02] pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
@@ -938,7 +871,6 @@ export default function Home() {
                         "p-8 rounded-3xl text-white relative overflow-hidden group cursor-pointer transition-all duration-500 hover:shadow-[0_20px_40px_rgba(0,0,0,0.1)] hover:-translate-y-2",
                         membershipBgColor
                       )}>
-                        {/* Popular badge */}
                         {membership.totalSubscriptions > 10 && (
                           <div className="absolute top-4 left-4 bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-3 py-1 rounded-full z-20">
                             POPULAR
@@ -976,7 +908,6 @@ export default function Home() {
                             {membership.description}
                           </p>
                           
-                          {/* Benefits List */}
                           <div className="space-y-2">
                             <span className="text-[10px] uppercase tracking-widest opacity-60 block">Key Benefits</span>
                             <div className="space-y-1.5">
@@ -1033,7 +964,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Services Slider Section - Real-time Data */}
       <section className="py-24 px-4 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
@@ -1132,7 +1062,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Products Slider Section - Real-time Data */}
       <section className="py-24 px-4 bg-[#0f0f0f] text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-1/2 h-full bg-secondary/5 blur-[150px] pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
@@ -1230,7 +1159,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Staff Slider Section - Real-time Data */}
       <section className="py-32 px-4 bg-gray-50/50 overflow-hidden relative">
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-20">
@@ -1316,7 +1244,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Branches Section - Real-time Data */}
       <section className="py-32 px-4 bg-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.02] pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">
@@ -1394,7 +1321,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Newsletter Section */}
       <section className="py-32 px-4 bg-primary relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
           <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-secondary blur-[150px] animate-pulse"></div>
@@ -1427,7 +1353,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Final CTA */}
       <section className="relative py-40 px-4 overflow-hidden">
         <div 
           className="absolute inset-0 bg-cover bg-fixed bg-center scale-110"
@@ -1455,7 +1380,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="bg-[#050505] text-white py-32 px-4 border-t border-white/5 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none"></div>
         <div className="max-w-7xl mx-auto relative z-10">

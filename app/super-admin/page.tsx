@@ -116,7 +116,6 @@ interface BranchDocument {
   name?: string;
   city?: string;
   managerName?: string;
-  // Add other branch fields as needed
   [key: string]: any;
 }
 
@@ -185,35 +184,128 @@ export default function SuperAdminDashboard() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // Real-time data states
-  const [overallStats, setOverallStats] = useState<OverallStats>({
-    totalBranches: 0,
-    totalRevenue: 0,
-    totalCustomers: 0,
-    avgRating: 0,
-    monthlyGrowth: 0,
-    totalServices: 0,
-    totalProducts: 0,
-    totalCategories: 0,
-    totalBookings: 0,
+  
+  // Initial state with cached data if available
+  const [overallStats, setOverallStats] = useState<OverallStats>(() => {
+    if (typeof window !== 'undefined') {
+      const cachedStats = localStorage.getItem('dashboard_stats');
+      if (cachedStats) {
+        try {
+          return JSON.parse(cachedStats);
+        } catch {
+          // If cached data is invalid, return defaults
+        }
+      }
+    }
+    return {
+      totalBranches: 0,
+      totalRevenue: 0,
+      totalCustomers: 0,
+      avgRating: 0,
+      monthlyGrowth: 0,
+      totalServices: 0,
+      totalProducts: 0,
+      totalCategories: 0,
+      totalBookings: 0,
+    };
   });
 
-  const [branchPerformance, setBranchPerformance] = useState<
-    BranchPerformance[]
-  >([]);
+  const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>(
+    () => {
+      if (typeof window !== 'undefined') {
+        const cachedBranches = localStorage.getItem('dashboard_branches');
+        if (cachedBranches) {
+          try {
+            return JSON.parse(cachedBranches);
+          } catch {
+            // If cached data is invalid, return empty array
+          }
+        }
+      }
+      return [];
+    }
+  );
+  
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>(
-    []
+    () => {
+      if (typeof window !== 'undefined') {
+        const cachedActivities = localStorage.getItem('dashboard_activities');
+        if (cachedActivities) {
+          try {
+            return JSON.parse(cachedActivities);
+          } catch {
+            // If cached data is invalid, return empty array
+          }
+        }
+      }
+      return [];
+    }
   );
 
-  // Recent items states
+  // Recent items states with initial cached values
   const [recentCategories, setRecentCategories] = useState<RecentCategory[]>(
-    []
+    () => {
+      if (typeof window !== 'undefined') {
+        const cachedCategories = localStorage.getItem('dashboard_categories');
+        if (cachedCategories) {
+          try {
+            return JSON.parse(cachedCategories);
+          } catch {
+            // If cached data is invalid, return empty array
+          }
+        }
+      }
+      return [];
+    }
   );
-  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([]);
-  const [recentServices, setRecentServices] = useState<RecentService[]>([]);
-  const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
+  
+  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>(
+    () => {
+      if (typeof window !== 'undefined') {
+        const cachedProducts = localStorage.getItem('dashboard_products');
+        if (cachedProducts) {
+          try {
+            return JSON.parse(cachedProducts);
+          } catch {
+            // If cached data is invalid, return empty array
+          }
+        }
+      }
+      return [];
+    }
+  );
+  
+  const [recentServices, setRecentServices] = useState<RecentService[]>(
+    () => {
+      if (typeof window !== 'undefined') {
+        const cachedServices = localStorage.getItem('dashboard_services');
+        if (cachedServices) {
+          try {
+            return JSON.parse(cachedServices);
+          } catch {
+            // If cached data is invalid, return empty array
+          }
+        }
+      }
+      return [];
+    }
+  );
+  
+  const [recentBookings, setRecentBookings] = useState<RecentBooking[]>(
+    () => {
+      if (typeof window !== 'undefined') {
+        const cachedBookings = localStorage.getItem('dashboard_bookings');
+        if (cachedBookings) {
+          try {
+            return JSON.parse(cachedBookings);
+          } catch {
+            // If cached data is invalid, return empty array
+          }
+        }
+      }
+      return [];
+    }
+  );
 
   const handleLogout = () => {
     logout();
@@ -239,61 +331,77 @@ export default function SuperAdminDashboard() {
     } ago`;
   };
 
-  // Fetch all data from Firebase
+  // Fetch all data from Firebase - NON-BLOCKING
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        setLoading(true);
+        // Use Promise.all for parallel fetching
+        const fetchPromises = [
+          getDocs(collection(db, "branches")),
+          getDocs(collection(db, "feedbacks")),
+          getDocs(collection(db, "services")),
+          getDocs(collection(db, "products")),
+          getDocs(collection(db, "categories")),
+          getDocs(collection(db, "bookings"))
+        ];
 
-        // 1. Fetch Branches
-        const branchesSnapshot = await getDocs(collection(db, "branches"));
+        // Wait for all data with timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Data fetch timeout')), 5000)
+        );
+
+        const results = await Promise.race([
+          Promise.all(fetchPromises),
+          timeoutPromise
+        ]) as any[];
+
+        const [
+          branchesSnapshot,
+          feedbacksSnapshot,
+          servicesSnapshot,
+          productsSnapshot,
+          categoriesSnapshot,
+          bookingsSnapshot
+        ] = results;
+
+        // Process data
         const branchesData: BranchDocument[] = branchesSnapshot.docs.map(
-          (doc) => ({
+          (doc: any) => ({
             id: doc.id,
             ...doc.data(),
           })
         );
 
-        // 2. Fetch Feedbacks for ratings
-        const feedbacksSnapshot = await getDocs(collection(db, "feedbacks"));
         const feedbacksData: FeedbackDocument[] = feedbacksSnapshot.docs.map(
-          (doc) => ({
+          (doc: any) => ({
             id: doc.id,
             ...doc.data(),
           })
         );
 
-        // 3. Fetch Services
-        const servicesSnapshot = await getDocs(collection(db, "services"));
         const servicesData: ServiceDocument[] = servicesSnapshot.docs.map(
-          (doc) => ({
+          (doc: any) => ({
             id: doc.id,
             ...doc.data(),
           })
         );
 
-        // 4. Fetch Products
-        const productsSnapshot = await getDocs(collection(db, "products"));
         const productsData: ProductDocument[] = productsSnapshot.docs.map(
-          (doc) => ({
+          (doc: any) => ({
             id: doc.id,
             ...doc.data(),
           })
         );
 
-        // 5. Fetch Categories
-        const categoriesSnapshot = await getDocs(collection(db, "categories"));
         const categoriesData: CategoryDocument[] = categoriesSnapshot.docs.map(
-          (doc) => ({
+          (doc: any) => ({
             id: doc.id,
             ...doc.data(),
           })
         );
 
-        // 6. Fetch Bookings
-        const bookingsSnapshot = await getDocs(collection(db, "bookings"));
         const bookingsData: BookingDocument[] = bookingsSnapshot.docs.map(
-          (doc) => ({
+          (doc: any) => ({
             id: doc.id,
             ...doc.data(),
           })
@@ -302,18 +410,7 @@ export default function SuperAdminDashboard() {
         // Calculate overall stats
         const totalBranches = branchesData.length;
 
-        // Calculate total revenue from services and products
-        const totalServiceRevenue = servicesData.reduce(
-          (sum, service) => sum + (service.revenue || 0),
-          0
-        );
-        const totalProductRevenue = productsData.reduce(
-          (sum, product) => sum + (product.revenue || 0),
-          0
-        );
-        const totalRevenue = totalServiceRevenue + totalProductRevenue;
-
-        // Calculate total bookings revenue
+        // Calculate total revenue from bookings
         const totalBookingsRevenue = bookingsData.reduce(
           (sum, booking) => sum + (booking.totalAmount || 0),
           0
@@ -326,28 +423,25 @@ export default function SuperAdminDashboard() {
         );
         const avgRating =
           feedbacksData.length > 0
-            ? (totalRating / feedbacksData.length).toFixed(1)
-            : "0";
+            ? parseFloat((totalRating / feedbacksData.length).toFixed(1))
+            : 0;
 
         // Prepare branch performance data
         const branchPerformanceData: BranchPerformance[] = branchesData.map(
           (branch) => {
-            // Get branch-specific feedbacks
             const branchFeedbacks = feedbacksData.filter(
               (fb) => fb.branchId === branch.id || fb.branchName === branch.name
             );
 
-            // Calculate branch rating
             const branchRatingTotal = branchFeedbacks.reduce(
               (sum, fb) => sum + (fb.rating || 0),
               0
             );
             const branchRating =
               branchFeedbacks.length > 0
-                ? (branchRatingTotal / branchFeedbacks.length).toFixed(1)
-                : "0";
+                ? parseFloat((branchRatingTotal / branchFeedbacks.length).toFixed(1))
+                : 0;
 
-            // Calculate branch revenue
             const branchServices = servicesData.filter(
               (service) =>
                 service.branches?.includes(branch.id) ||
@@ -369,19 +463,16 @@ export default function SuperAdminDashboard() {
             );
             const branchRevenue = branchServiceRevenue + branchProductRevenue;
 
-            // Get branch bookings
             const branchBookings = bookingsData.filter(
               (booking) =>
                 booking.branchId === branch.id ||
                 booking.branchName === branch.name
             );
 
-            // Determine status based on rating
             let status = "average";
-            const ratingNum = parseFloat(branchRating);
-            if (ratingNum >= 4.5) status = "excellent";
-            else if (ratingNum >= 4.0) status = "good";
-            else if (ratingNum >= 3.5) status = "average";
+            if (branchRating >= 4.5) status = "excellent";
+            else if (branchRating >= 4.0) status = "good";
+            else if (branchRating >= 3.5) status = "average";
             else status = "needs_attention";
 
             return {
@@ -389,7 +480,7 @@ export default function SuperAdminDashboard() {
               name: branch.name || "Unnamed Branch",
               revenue: branchRevenue,
               customers: branchFeedbacks.length,
-              rating: ratingNum,
+              rating: branchRating,
               status: status,
               city: branch.city || "N/A",
               manager: branch.managerName || "N/A",
@@ -398,7 +489,7 @@ export default function SuperAdminDashboard() {
           }
         );
 
-        // Prepare recent activities from feedbacks
+        // Prepare recent activities
         const recentActivitiesData: RecentActivity[] = feedbacksData
           .sort((a, b) => {
             const dateA = a.createdAt?.toDate()?.getTime() || 0;
@@ -418,7 +509,7 @@ export default function SuperAdminDashboard() {
             };
           });
 
-        // Get recent categories (sorted by createdAt)
+        // Get recent categories
         const recentCategoriesData: RecentCategory[] = categoriesData
           .sort((a, b) => {
             const dateA = a.createdAt?.toDate()?.getTime() || 0;
@@ -490,39 +581,53 @@ export default function SuperAdminDashboard() {
           }));
 
         // Update state with real data
-        setOverallStats({
+        const newStats = {
           totalBranches: totalBranches,
-          totalRevenue: totalBookingsRevenue, // Use bookings revenue
+          totalRevenue: totalBookingsRevenue,
           totalCustomers: feedbacksData.length,
-          avgRating: parseFloat(avgRating),
+          avgRating: avgRating,
           monthlyGrowth: 12.5,
           totalServices: servicesData.length,
           totalProducts: productsData.length,
           totalCategories: categoriesData.length,
           totalBookings: bookingsData.length,
-        });
+        };
 
+        setOverallStats(newStats);
         setBranchPerformance(branchPerformanceData);
         setRecentActivities(recentActivitiesData);
         setRecentCategories(recentCategoriesData);
         setRecentProducts(recentProductsData);
         setRecentServices(recentServicesData);
         setRecentBookings(recentBookingsData);
+
+        // Cache data in localStorage
+        try {
+          localStorage.setItem('dashboard_stats', JSON.stringify(newStats));
+          localStorage.setItem('dashboard_branches', JSON.stringify(branchPerformanceData));
+          localStorage.setItem('dashboard_activities', JSON.stringify(recentActivitiesData));
+          localStorage.setItem('dashboard_categories', JSON.stringify(recentCategoriesData));
+          localStorage.setItem('dashboard_products', JSON.stringify(recentProductsData));
+          localStorage.setItem('dashboard_services', JSON.stringify(recentServicesData));
+          localStorage.setItem('dashboard_bookings', JSON.stringify(recentBookingsData));
+          localStorage.setItem('dashboard_last_fetched', Date.now().toString());
+        } catch (error) {
+          console.log('Could not cache dashboard data');
+        }
+
       } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoading(false);
+        console.log("Dashboard data fetch:", error);
+        // Keep using cached data if available
       }
     };
 
-    fetchDashboardData();
-
-    // You can add real-time listeners here if needed
-    // const unsubscribe = onSnapshot(collection(db, "branches"), () => {
-    //   fetchDashboardData();
-    // });
-
-    // return () => unsubscribe();
+    // Only fetch fresh data if cache is older than 5 minutes
+    const lastFetched = localStorage.getItem('dashboard_last_fetched');
+    const shouldFetch = !lastFetched || (Date.now() - parseInt(lastFetched)) > 300000; // 5 minutes
+    
+    if (shouldFetch) {
+      fetchDashboardData();
+    }
   }, []);
 
   const getStatusColor = (status: string): string => {
@@ -559,19 +664,6 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-lg text-muted-foreground">
-            Loading Dashboard Data...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen bg-[#f8f9fa]">
       {/* Sidebar - Now visible by default */}
@@ -586,7 +678,7 @@ export default function SuperAdminDashboard() {
       <div
         className={cn(
           "flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0",
-          sidebarOpen ? "lg:ml-0" : "lg:ml-0" // Adjusted margin for sidebar
+          sidebarOpen ? "lg:ml-0" : "lg:ml-0"
         )}
       >
         {/* Header */}

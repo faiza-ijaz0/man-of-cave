@@ -16,7 +16,8 @@ import {
   DollarSign, CreditCard, Hash, Package, Plus, XCircle, 
   FileText, Receipt, Printer, Download, Search, Filter,
   Trash2, Eye, FileEdit, History, Tag, Box, AlertCircle,
-  CheckCircle2, Loader2, ChevronDown, ChevronUp,MoreVertical 
+  CheckCircle2, Loader2, ChevronDown, ChevronUp, MoreVertical,
+  Palette, Layout, Briefcase, Sparkles, Minimize2
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -140,6 +141,9 @@ interface Staff {
   status: 'active' | 'inactive';
 }
 
+// Template Types
+type TemplateType = 'classic' | 'modern' | 'professional' | 'colorful' | 'minimal';
+
 export default function SuperAdminInvoices() {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -190,6 +194,8 @@ export default function SuperAdminInvoices() {
   const [showHistory, setShowHistory] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('classic');
+  const [previewTemplate, setPreviewTemplate] = useState<TemplateType>('classic');
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -420,139 +426,696 @@ export default function SuperAdminInvoices() {
     setInvoiceForm({ ...invoiceForm, teamMembers: newTeamMembers });
   };
 
-  // Generate Invoice PDF
-  const generateInvoicePDF = async (invoice: InvoiceData, download = true) => {
+  // ==================== PDF TEMPLATE GENERATORS ====================
+
+  // 1. CLASSIC TEMPLATE (Original)
+  const generateClassicTemplate = (doc: jsPDF, invoice: InvoiceData) => {
+    // Brand Header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(59, 130, 246); // Blue color
+    doc.text("INVOICE", 105, 20, { align: "center" });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`#${invoice.invoiceNumber}`, 105, 28, { align: "center" });
+    
+    // Brand Info
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+    doc.text("Company Name", 20, 40);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Email: ${invoice.brandEmail}`, 20, 46);
+    doc.text(`Phone: ${invoice.brandPhone}`, 20, 52);
+    
+    // Invoice Details
+    doc.setFont("helvetica", "bold");
+    doc.text("Invoice Details", 150, 40);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Date: ${invoice.date}`, 150, 46);
+    doc.text(`Time: ${invoice.time}`, 150, 52);
+    doc.text(`Status: ${invoice.status.toUpperCase()}`, 150, 58);
+    
+    // Customer Info
+    doc.setFont("helvetica", "bold");
+    doc.text("Bill To:", 20, 70);
+    doc.setFont("helvetica", "normal");
+    doc.text(invoice.customer, 20, 76);
+    doc.text(`Email: ${invoice.email}`, 20, 82);
+    doc.text(`Phone: ${invoice.phone}`, 20, 88);
+    if (invoice.trnNumber) {
+      doc.text(`TRN: ${invoice.trnNumber}`, 20, 94);
+    }
+    
+    // Service Details
+    doc.setFont("helvetica", "bold");
+    doc.text("Service Details", 20, 105);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Service: ${invoice.service}`, 20, 111);
+    doc.text(`Category: ${invoice.category}`, 20, 117);
+    doc.text(`Branch: ${invoice.branch}`, 20, 123);
+    doc.text(`Staff: ${invoice.staff}`, 20, 129);
+    
+    if (invoice.teamMembers.length > 0) {
+      doc.text("Team Members:", 20, 135);
+      invoice.teamMembers.forEach((tm, idx) => {
+        doc.text(`  • ${tm.name} (Tip: $${tm.tip})`, 20, 141 + (idx * 6));
+      });
+    }
+    
+    // Items Table
+    const tableStartY = invoice.teamMembers.length > 0 ? 141 + (invoice.teamMembers.length * 6) : 141;
+    
+    autoTable(doc, {
+      startY: tableStartY,
+      head: [['Description', 'Qty', 'Unit Price ($)', 'Total ($)']],
+      body: [
+        // Service row
+        [invoice.service, '1', invoice.price.toFixed(2), invoice.price.toFixed(2)],
+        // Products rows
+        ...invoice.products.map(p => [
+          p.name,
+          p.quantity.toString(),
+          p.price.toFixed(2),
+          (p.price * p.quantity).toFixed(2)
+        ]),
+        // Service charges
+        ['Service Charges', '1', invoice.serviceCharges.toFixed(2), invoice.serviceCharges.toFixed(2)]
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246] },
+      margin: { left: 20, right: 20 }
+    });
+    
+    // Summary
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Subtotal:", 140, finalY);
+    doc.text(`$${calculateSubtotal().toFixed(2)}`, 170, finalY, { align: "right" });
+    
+    doc.text(`Discount (${invoice.discountType}):`, 140, finalY + 6);
+    doc.text(`-$${calculateDiscount().toFixed(2)}`, 170, finalY + 6, { align: "right" });
+    
+    doc.text(`Tax (${invoice.tax}%):`, 140, finalY + 12);
+    doc.text(`$${calculateTax().toFixed(2)}`, 170, finalY + 12, { align: "right" });
+    
+    doc.text(`Tips:`, 140, finalY + 18);
+    const totalTips = invoice.serviceTip + invoice.teamMembers.reduce((sum, tm) => sum + tm.tip, 0);
+    doc.text(`$${totalTips.toFixed(2)}`, 170, finalY + 18, { align: "right" });
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text("TOTAL:", 140, finalY + 28);
+    doc.text(`$${calculateTotal().toFixed(2)}`, 170, finalY + 28, { align: "right" });
+    
+    // Payment Summary
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Payment Summary:", 20, finalY + 40);
+    
+    invoice.paymentMethods.forEach((method, idx) => {
+      const amount = invoice.paymentAmounts[method];
+      if (amount > 0) {
+        doc.text(`${method.toUpperCase()}: $${amount.toFixed(2)}`, 20, finalY + 46 + (idx * 6));
+      }
+    });
+    
+    doc.text(`Total Paid: $${calculateTotalPaid().toFixed(2)}`, 20, finalY + 46 + (invoice.paymentMethods.length * 6));
+    doc.text(`Balance: $${(calculateTotal() - calculateTotalPaid()).toFixed(2)}`, 20, finalY + 52 + (invoice.paymentMethods.length * 6));
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Thank you for your business!", 105, 280, { align: "center" });
+    doc.text("Generated on: " + new Date().toLocaleDateString(), 105, 284, { align: "center" });
+  };
+
+  // 2. MODERN TEMPLATE
+  const generateModernTemplate = (doc: jsPDF, invoice: InvoiceData) => {
+    // Gradient Header
+    doc.setFillColor(59, 130, 246);
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    // White text on blue
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.text("INVOICE", 105, 20, { align: "center" });
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`#${invoice.invoiceNumber}`, 105, 28, { align: "center" });
+    
+    // White content area
+    doc.setFillColor(255, 255, 255);
+    doc.rect(15, 50, 180, 200, 'F');
+    
+    // Modern grid layout
+    doc.setTextColor(51, 51, 51);
+    doc.setFontSize(9);
+    
+    // Two column layout
+    doc.setFont("helvetica", "bold");
+    doc.text("FROM", 25, 60);
+    doc.text("BILL TO", 120, 60);
+    
+    doc.setFont("helvetica", "normal");
+    doc.text("Your Company Name", 25, 67);
+    doc.text(invoice.brandEmail, 25, 73);
+    doc.text(invoice.brandPhone, 25, 79);
+    
+    doc.text(invoice.customer, 120, 67);
+    doc.text(invoice.email, 120, 73);
+    doc.text(invoice.phone, 120, 79);
+    
+    // Divider
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(25, 90, 185, 90);
+    
+    // Invoice details in cards
+    const details = [
+      { label: 'Date', value: invoice.date },
+      { label: 'Service', value: invoice.service },
+      { label: 'Branch', value: invoice.branch },
+      { label: 'Staff', value: invoice.staff }
+    ];
+    
+    details.forEach((detail, index) => {
+      const x = 25 + (index % 2) * 80;
+      const y = 100 + Math.floor(index / 2) * 20;
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(detail.label, x, y);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(51, 51, 51);
+      doc.text(detail.value, x, y + 5);
+    });
+    
+    // Modern table
+    const tableStartY = 140;
+    
+    autoTable(doc, {
+      startY: tableStartY,
+      head: [['ITEM', 'QTY', 'PRICE', 'TOTAL']],
+      body: [
+        [invoice.service, '1', `$${invoice.price.toFixed(2)}`, `$${invoice.price.toFixed(2)}`],
+        ...invoice.products.map(p => [
+          p.name,
+          p.quantity.toString(),
+          `$${p.price.toFixed(2)}`,
+          `$${(p.price * p.quantity).toFixed(2)}`
+        ])
+      ],
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [248, 250, 252],
+        textColor: [71, 85, 105],
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: { fontSize: 9 },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 40 }
+      },
+      margin: { left: 25, right: 25 }
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Totals in modern style
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    
+    const totals = [
+      { label: 'Subtotal', value: calculateSubtotal() },
+      { label: `Discount (${invoice.discountType})`, value: -calculateDiscount() },
+      { label: `Tax (${invoice.tax}%)`, value: calculateTax() },
+      { label: 'Tips', value: invoice.serviceTip + invoice.teamMembers.reduce((sum, tm) => sum + tm.tip, 0) }
+    ];
+    
+    totals.forEach((total, index) => {
+      doc.text(total.label, 130, finalY + (index * 6));
+      doc.text(`$${total.value.toFixed(2)}`, 180, finalY + (index * 6), { align: "right" });
+    });
+    
+    // Grand total
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(59, 130, 246);
+    doc.line(130, finalY + 28, 185, finalY + 28);
+    doc.text("TOTAL", 130, finalY + 25);
+    doc.text(`$${calculateTotal().toFixed(2)}`, 180, finalY + 25, { align: "right" });
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Thank you for choosing us!", 105, 280, { align: "center" });
+  };
+
+  // 3. PROFESSIONAL TEMPLATE
+  const generateProfessionalTemplate = (doc: jsPDF, invoice: InvoiceData) => {
+    // Formal header with lines
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    
+    // Top border
+    doc.line(20, 20, 190, 20);
+    
+    // Company name and logo area
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text("COMPANY NAME", 105, 35, { align: "center" });
+    
+    // Tax Invoice title
+    doc.setFontSize(14);
+    doc.setTextColor(100, 100, 100);
+    doc.text("TAX INVOICE", 105, 45, { align: "center" });
+    
+    // Invoice number with border
+    doc.setFillColor(240, 240, 240);
+    doc.rect(140, 55, 50, 12, 'F');
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Invoice #: ${invoice.invoiceNumber}`, 145, 63);
+    
+    // Formal details table
+    const details = [
+      { label: 'Invoice Date', value: invoice.date },
+      { label: 'Customer Name', value: invoice.customer },
+      { label: 'Customer Email', value: invoice.email },
+      { label: 'Customer Phone', value: invoice.phone },
+      { label: 'TRN Number', value: invoice.trnNumber || 'N/A' }
+    ];
+    
+    let y = 75;
+    details.forEach((detail) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(detail.label, 25, y);
+      
+      doc.setFont("helvetica", "normal");
+      doc.text(detail.value, 80, y);
+      y += 6;
+    });
+    
+    // Service details
+    y += 10;
+    doc.setFont("helvetica", "bold");
+    doc.text("Service Details", 25, y);
+    y += 8;
+    
+    const serviceDetails = [
+      { label: 'Service', value: invoice.service },
+      { label: 'Category', value: invoice.category },
+      { label: 'Branch', value: invoice.branch },
+      { label: 'Staff', value: invoice.staff }
+    ];
+    
+    serviceDetails.forEach((detail) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`${detail.label}:`, 25, y);
+      doc.text(detail.value, 70, y);
+      y += 5;
+    });
+    
+    // Professional table
+    const tableStartY = y + 10;
+    
+    autoTable(doc, {
+      startY: tableStartY,
+      head: [['Description', 'Quantity', 'Unit Price (USD)', 'Amount (USD)']],
+      body: [
+        [invoice.service, '1', invoice.price.toFixed(2), invoice.price.toFixed(2)],
+        ...invoice.products.map(p => [
+          p.name,
+          p.quantity.toString(),
+          p.price.toFixed(2),
+          (p.price * p.quantity).toFixed(2)
+        ])
+      ],
+      theme: 'striped',
+      headStyles: { 
+        fillColor: [50, 50, 50],
+        textColor: [255, 255, 255],
+        fontSize: 9
+      },
+      bodyStyles: { fontSize: 9 },
+      margin: { left: 25, right: 25 }
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Calculation table
+    const calculations = [
+      { label: 'Subtotal', value: calculateSubtotal() },
+      { label: `Discount`, value: -calculateDiscount() },
+      { label: `Tax (${invoice.tax}%)`, value: calculateTax() },
+      { label: 'Service Charges', value: invoice.serviceCharges }
+    ];
+    
+    calculations.forEach((calc, index) => {
+      doc.setFontSize(9);
+      doc.text(calc.label, 130, finalY + (index * 5));
+      doc.text(`$${calc.value.toFixed(2)}`, 180, finalY + (index * 5), { align: "right" });
+    });
+    
+    // Grand Total
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.line(130, finalY + 25, 180, finalY + 25);
+    doc.text("GRAND TOTAL", 130, finalY + 22);
+    doc.text(`$${calculateTotal().toFixed(2)}`, 180, finalY + 22, { align: "right" });
+    
+    // Payment summary
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Payment Summary", 25, finalY + 40);
+    
+    let paymentY = finalY + 47;
+    invoice.paymentMethods.forEach((method) => {
+      const amount = invoice.paymentAmounts[method];
+      if (amount > 0) {
+        doc.text(`${method.charAt(0).toUpperCase() + method.slice(1)}: $${amount.toFixed(2)}`, 25, paymentY);
+        paymentY += 5;
+      }
+    });
+    
+    // Terms and conditions
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Terms & Conditions:", 25, 270);
+    doc.text("1. Payment due within 30 days", 25, 275);
+    doc.text("2. Late fees may apply", 25, 280);
+    doc.text("3. All amounts in USD", 25, 285);
+  };
+
+  // 4. COLORFUL TEMPLATE
+  const generateColorfulTemplate = (doc: jsPDF, invoice: InvoiceData) => {
+    // Colorful header with multiple colors
+    const colors = [
+      [255, 107, 107], // Coral
+      [255, 159, 67],  // Orange
+      [255, 205, 86],  // Yellow
+      [72, 187, 120],  // Green
+      [54, 162, 235],  // Blue
+    ];
+    
+    // Colorful header strips
+    colors.forEach((color, index) => {
+      doc.setFillColor(...color);
+      doc.rect(0, index * 10, 210, 10, 'F');
+    });
+    
+    // White text on colorful background
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(28);
+    doc.text("INVOICE", 105, 32, { align: "center" });
+    
+    // Invoice number in bubble
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(85, 40, 40, 12, 6, 6, 'F');
+    doc.setTextColor(59, 130, 246);
+    doc.setFontSize(10);
+    doc.text(invoice.invoiceNumber, 105, 47, { align: "center" });
+    
+    // White content area
+    doc.setFillColor(255, 255, 255);
+    doc.rect(15, 65, 180, 190, 'F');
+    
+    // Colorful customer info boxes
+    doc.setFillColor(240, 249, 255);
+    doc.roundedRect(20, 70, 170, 40, 5, 5, 'F');
+    
+    doc.setTextColor(59, 130, 246);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("BILL TO", 25, 80);
+    
+    doc.setTextColor(51, 51, 51);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(invoice.customer, 25, 87);
+    doc.text(invoice.email, 25, 93);
+    doc.text(invoice.phone, 25, 99);
+    
+    // Colorful service details
+    const serviceBoxes = [
+      { label: 'Service', value: invoice.service, color: [255, 107, 107] },
+      { label: 'Date', value: invoice.date, color: [255, 159, 67] },
+      { label: 'Branch', value: invoice.branch, color: [72, 187, 120] },
+      { label: 'Staff', value: invoice.staff, color: [54, 162, 235] }
+    ];
+    
+    serviceBoxes.forEach((box, index) => {
+      const x = 20 + (index % 2) * 85;
+      const y = 120 + Math.floor(index / 2) * 25;
+      
+      doc.setFillColor(...box.color);
+      doc.roundedRect(x, y, 80, 20, 3, 3, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text(box.label, x + 5, y + 8);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(box.value, x + 5, y + 15);
+    });
+    
+    // Colorful table
+    const tableStartY = 170;
+    
+    autoTable(doc, {
+      startY: tableStartY,
+      head: [['ITEM', 'QUANTITY', 'PRICE', 'TOTAL']],
+      body: [
+        [invoice.service, '1', `$${invoice.price.toFixed(2)}`, `$${invoice.price.toFixed(2)}`],
+        ...invoice.products.map(p => [
+          p.name,
+          p.quantity.toString(),
+          `$${p.price.toFixed(2)}`,
+          `$${(p.price * p.quantity).toFixed(2)}`
+        ])
+      ],
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [59, 130, 246],
+        textColor: [255, 255, 255]
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 20, right: 20 }
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Colorful totals
+    doc.setFontSize(10);
+    
+    const colorfulTotals = [
+      { label: 'Subtotal', value: calculateSubtotal(), color: [100, 116, 139] },
+      { label: 'Discount', value: -calculateDiscount(), color: [34, 197, 94] },
+      { label: `Tax (${invoice.tax}%)`, value: calculateTax(), color: [59, 130, 246] },
+      { label: 'Tips', value: invoice.serviceTip + invoice.teamMembers.reduce((sum, tm) => sum + tm.tip, 0), color: [168, 85, 247] }
+    ];
+    
+    colorfulTotals.forEach((total, index) => {
+      doc.setTextColor(...total.color);
+      doc.text(total.label, 130, finalY + (index * 6));
+      doc.text(`$${total.value.toFixed(2)}`, 180, finalY + (index * 6), { align: "right" });
+    });
+    
+    // Grand total with colorful background
+    doc.setFillColor(59, 130, 246);
+    doc.roundedRect(130, finalY + 28, 50, 15, 3, 3, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("TOTAL", 135, finalY + 38);
+    doc.text(`$${calculateTotal().toFixed(2)}`, 175, finalY + 38, { align: "right" });
+    
+    // Fun footer
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text("🌟 Thank you for your awesome business! 🌟", 105, 280, { align: "center" });
+  };
+
+  // 5. MINIMAL TEMPLATE
+  const generateMinimalTemplate = (doc: jsPDF, invoice: InvoiceData) => {
+    // Minimal header with just invoice number
+    doc.setTextColor(75, 85, 99);
+    doc.setFont("helvetica", "light");
+    doc.setFontSize(14);
+    doc.text("INVOICE", 20, 25);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`#${invoice.invoiceNumber}`, 20, 32);
+    
+    // Simple divider
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.3);
+    doc.line(20, 38, 190, 38);
+    
+    // Minimal customer info
+    doc.setFontSize(9);
+    doc.text("BILL TO", 20, 48);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(invoice.customer, 20, 55);
+    
+    doc.setFontSize(9);
+    doc.text(invoice.email, 20, 62);
+    doc.text(invoice.phone, 20, 68);
+    
+    // Minimal service info in grid
+    const serviceInfo = [
+      { label: 'Date', value: invoice.date },
+      { label: 'Service', value: invoice.service },
+      { label: 'Staff', value: invoice.staff }
+    ];
+    
+    let infoY = 80;
+    serviceInfo.forEach((info) => {
+      doc.setFontSize(8);
+      doc.setTextColor(107, 114, 128);
+      doc.text(info.label, 20, infoY);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(31, 41, 55);
+      doc.text(info.value, 20, infoY + 4);
+      
+      infoY += 12;
+    });
+    
+    // Simple table without borders
+    const tableStartY = infoY + 10;
+    
+    autoTable(doc, {
+      startY: tableStartY,
+      head: [['Item', 'Qty', 'Price', 'Total']],
+      body: [
+        [invoice.service, '1', invoice.price.toFixed(2), invoice.price.toFixed(2)],
+        ...invoice.products.map(p => [
+          p.name,
+          p.quantity.toString(),
+          p.price.toFixed(2),
+          (p.price * p.quantity).toFixed(2)
+        ])
+      ],
+      theme: 'plain',
+      headStyles: { 
+        textColor: [75, 85, 99],
+        fontStyle: 'bold',
+        fontSize: 9,
+        lineWidth: 0
+      },
+      bodyStyles: { 
+        fontSize: 9,
+        lineWidth: 0
+      },
+      margin: { left: 20, right: 20 }
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    
+    // Minimal totals
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99);
+    
+    const minimalTotals = [
+      { label: 'Subtotal', value: calculateSubtotal() },
+      { label: 'Discount', value: -calculateDiscount() },
+      { label: `Tax`, value: calculateTax() }
+    ];
+    
+    minimalTotals.forEach((total, index) => {
+      doc.text(total.label, 140, finalY + (index * 6));
+      doc.text(`$${total.value.toFixed(2)}`, 180, finalY + (index * 6), { align: "right" });
+    });
+    
+    // Grand total with minimal underline
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.5);
+    doc.line(140, finalY + 25, 180, finalY + 25);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(31, 41, 55);
+    doc.text("Total", 140, finalY + 22);
+    doc.text(`$${calculateTotal().toFixed(2)}`, 180, finalY + 22, { align: "right" });
+    
+    // Minimal payment info
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(107, 114, 128);
+    
+    let paymentY = finalY + 40;
+    doc.text("Payment Methods:", 20, paymentY);
+    
+    paymentY += 6;
+    invoice.paymentMethods.forEach((method) => {
+      const amount = invoice.paymentAmounts[method];
+      if (amount > 0) {
+        doc.text(`${method}: $${amount.toFixed(2)}`, 20, paymentY);
+        paymentY += 4;
+      }
+    });
+    
+    // Ultra minimal footer
+    doc.setFontSize(7);
+    doc.setTextColor(156, 163, 175);
+    doc.text("Invoice generated electronically", 105, 285, { align: "center" });
+  };
+
+  // ==================== MAIN PDF GENERATOR ====================
+  const generateInvoicePDF = async (
+    invoice: InvoiceData, 
+    templateType: TemplateType = selectedTemplate, 
+    download = true
+  ) => {
     setIsGenerating(true);
     
     try {
       const doc = new jsPDF('p', 'mm', 'a4');
       
-      // Brand Header
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(24);
-      doc.setTextColor(59, 130, 246); // Blue color
-      doc.text("INVOICE", 105, 20, { align: "center" });
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`#${invoice.invoiceNumber}`, 105, 28, { align: "center" });
-      
-      // Brand Info
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
-      doc.text("Company Name", 20, 40);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(`Email: ${invoice.brandEmail}`, 20, 46);
-      doc.text(`Phone: ${invoice.brandPhone}`, 20, 52);
-      
-      // Invoice Details
-      doc.setFont("helvetica", "bold");
-      doc.text("Invoice Details", 150, 40);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Date: ${invoice.date}`, 150, 46);
-      doc.text(`Time: ${invoice.time}`, 150, 52);
-      doc.text(`Status: ${invoice.status.toUpperCase()}`, 150, 58);
-      
-      // Customer Info
-      doc.setFont("helvetica", "bold");
-      doc.text("Bill To:", 20, 70);
-      doc.setFont("helvetica", "normal");
-      doc.text(invoice.customer, 20, 76);
-      doc.text(`Email: ${invoice.email}`, 20, 82);
-      doc.text(`Phone: ${invoice.phone}`, 20, 88);
-      if (invoice.trnNumber) {
-        doc.text(`TRN: ${invoice.trnNumber}`, 20, 94);
+      // Select template based on user choice
+      switch(templateType) {
+        case 'modern':
+          generateModernTemplate(doc, invoice);
+          break;
+        case 'professional':
+          generateProfessionalTemplate(doc, invoice);
+          break;
+        case 'colorful':
+          generateColorfulTemplate(doc, invoice);
+          break;
+        case 'minimal':
+          generateMinimalTemplate(doc, invoice);
+          break;
+        default:
+          generateClassicTemplate(doc, invoice);
       }
-      
-      // Service Details
-      doc.setFont("helvetica", "bold");
-      doc.text("Service Details", 20, 105);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Service: ${invoice.service}`, 20, 111);
-      doc.text(`Category: ${invoice.category}`, 20, 117);
-      doc.text(`Branch: ${invoice.branch}`, 20, 123);
-      doc.text(`Staff: ${invoice.staff}`, 20, 129);
-      
-      if (invoice.teamMembers.length > 0) {
-        doc.text("Team Members:", 20, 135);
-        invoice.teamMembers.forEach((tm, idx) => {
-          doc.text(`  • ${tm.name} (Tip: $${tm.tip})`, 20, 141 + (idx * 6));
-        });
-      }
-      
-      // Items Table
-      const tableStartY = invoice.teamMembers.length > 0 ? 141 + (invoice.teamMembers.length * 6) : 141;
-      
-      autoTable(doc, {
-        startY: tableStartY,
-        head: [['Description', 'Qty', 'Unit Price ($)', 'Total ($)']],
-        body: [
-          // Service row
-          [invoice.service, '1', invoice.price.toFixed(2), invoice.price.toFixed(2)],
-          // Products rows
-          ...invoice.products.map(p => [
-            p.name,
-            p.quantity.toString(),
-            p.price.toFixed(2),
-            (p.price * p.quantity).toFixed(2)
-          ]),
-          // Service charges
-          ['Service Charges', '1', invoice.serviceCharges.toFixed(2), invoice.serviceCharges.toFixed(2)]
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [59, 130, 246] },
-        margin: { left: 20, right: 20 }
-      });
-      
-      // Summary
-      const finalY = (doc as any).lastAutoTable.finalY + 20;
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text("Subtotal:", 140, finalY);
-      doc.text(`$${calculateSubtotal().toFixed(2)}`, 170, finalY, { align: "right" });
-      
-      doc.text(`Discount (${invoice.discountType}):`, 140, finalY + 6);
-      doc.text(`-$${calculateDiscount().toFixed(2)}`, 170, finalY + 6, { align: "right" });
-      
-      doc.text(`Tax (${invoice.tax}%):`, 140, finalY + 12);
-      doc.text(`$${calculateTax().toFixed(2)}`, 170, finalY + 12, { align: "right" });
-      
-      doc.text(`Tips:`, 140, finalY + 18);
-      const totalTips = invoice.serviceTip + invoice.teamMembers.reduce((sum, tm) => sum + tm.tip, 0);
-      doc.text(`$${totalTips.toFixed(2)}`, 170, finalY + 18, { align: "right" });
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(0, 0, 0);
-      doc.text("TOTAL:", 140, finalY + 28);
-      doc.text(`$${calculateTotal().toFixed(2)}`, 170, finalY + 28, { align: "right" });
-      
-      // Payment Summary
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text("Payment Summary:", 20, finalY + 40);
-      
-      invoice.paymentMethods.forEach((method, idx) => {
-        const amount = invoice.paymentAmounts[method];
-        if (amount > 0) {
-          doc.text(`${method.toUpperCase()}: $${amount.toFixed(2)}`, 20, finalY + 46 + (idx * 6));
-        }
-      });
-      
-      doc.text(`Total Paid: $${calculateTotalPaid().toFixed(2)}`, 20, finalY + 46 + (invoice.paymentMethods.length * 6));
-      doc.text(`Balance: $${(calculateTotal() - calculateTotalPaid()).toFixed(2)}`, 20, finalY + 52 + (invoice.paymentMethods.length * 6));
-      
-      // Footer
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text("Thank you for your business!", 105, 280, { align: "center" });
-      doc.text("Generated on: " + new Date().toLocaleDateString(), 105, 284, { align: "center" });
       
       if (download) {
-        doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
+        doc.save(`Invoice_${invoice.invoiceNumber}_${templateType}.pdf`);
       }
       
       return doc;
@@ -597,8 +1160,8 @@ export default function SuperAdminInvoices() {
       const invoicesRef = collection(db, 'customInvoices');
       await addDoc(invoicesRef, invoiceData);
       
-      // Generate PDF
-      await generateInvoicePDF(invoiceForm, true);
+      // Generate PDF with selected template
+      await generateInvoicePDF(invoiceForm, selectedTemplate, true);
       
       // Reset form
       setInvoiceForm({
@@ -919,14 +1482,36 @@ export default function SuperAdminInvoices() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   View
                                 </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => generateInvoicePDF(invoice, true)}
-                                >
-                                  <Download className="w-4 h-4 mr-2" />
-                                  Download
-                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                      <Download className="w-4 h-4 mr-2" />
+                                      Download
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => generateInvoicePDF(invoice, 'classic', true)}>
+                                      <Layout className="w-4 h-4 mr-2" />
+                                      Classic Template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => generateInvoicePDF(invoice, 'modern', true)}>
+                                      <Sparkles className="w-4 h-4 mr-2" />
+                                      Modern Template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => generateInvoicePDF(invoice, 'professional', true)}>
+                                      <Briefcase className="w-4 h-4 mr-2" />
+                                      Professional Template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => generateInvoicePDF(invoice, 'colorful', true)}>
+                                      <Palette className="w-4 h-4 mr-2" />
+                                      Colorful Template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => generateInvoicePDF(invoice, 'minimal', true)}>
+                                      <Minimize2 className="w-4 h-4 mr-2" />
+                                      Minimal Template
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="sm">
@@ -972,6 +1557,75 @@ export default function SuperAdminInvoices() {
             </SheetHeader>
 
             <div className="py-6 space-y-8">
+              {/* Template Selection */}
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Palette className="w-5 h-5" />
+                  Choose PDF Template
+                </h3>
+                
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div 
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedTemplate === 'classic' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setSelectedTemplate('classic')}
+                  >
+                    <div className="text-center">
+                      <Layout className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                      <p className="text-sm font-medium">Classic</p>
+                      <p className="text-xs text-gray-500">Standard design</p>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedTemplate === 'modern' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setSelectedTemplate('modern')}
+                  >
+                    <div className="text-center">
+                      <Sparkles className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                      <p className="text-sm font-medium">Modern</p>
+                      <p className="text-xs text-gray-500">Clean & sleek</p>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedTemplate === 'professional' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setSelectedTemplate('professional')}
+                  >
+                    <div className="text-center">
+                      <Briefcase className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                      <p className="text-sm font-medium">Professional</p>
+                      <p className="text-xs text-gray-500">Corporate style</p>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedTemplate === 'colorful' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setSelectedTemplate('colorful')}
+                  >
+                    <div className="text-center">
+                      <Palette className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                      <p className="text-sm font-medium">Colorful</p>
+                      <p className="text-xs text-gray-500">Vibrant design</p>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedTemplate === 'minimal' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    onClick={() => setSelectedTemplate('minimal')}
+                  >
+                    <div className="text-center">
+                      <Minimize2 className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                      <p className="text-sm font-medium">Minimal</p>
+                      <p className="text-xs text-gray-500">Simple & clean</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <p className="text-sm text-gray-500">
+                  Selected template: <span className="font-medium capitalize">{selectedTemplate}</span>
+                </p>
+              </div>
+
               {/* Customer Information */}
               <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1433,7 +2087,7 @@ export default function SuperAdminInvoices() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => generateInvoicePDF(invoiceForm, true)}
+                  onClick={() => generateInvoicePDF(invoiceForm, selectedTemplate, true)}
                   variant="outline"
                   disabled={isGenerating}
                 >
@@ -1472,106 +2126,85 @@ export default function SuperAdminInvoices() {
             <SheetHeader>
               <SheetTitle>Invoice Preview</SheetTitle>
               <SheetDescription>
-                Preview invoice before downloading
+                Preview invoice before downloading. Select a template to preview.
               </SheetDescription>
             </SheetHeader>
 
             {selectedInvoice && (
               <div className="py-6">
-                <div id="invoice-preview" className="bg-white p-8 rounded-lg border shadow-sm">
-                  {/* Invoice Header */}
-                  <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-blue-600 mb-2">INVOICE</h1>
-                    <p className="text-gray-600">#{selectedInvoice.invoiceNumber}</p>
-                  </div>
-
-                  {/* Company & Customer Info */}
-                  <div className="grid grid-cols-2 gap-8 mb-8">
-                    <div>
-                      <h3 className="font-semibold mb-2">From:</h3>
-                      <p className="font-bold">Your Company Name</p>
-                      <p>Email: {selectedInvoice.brandEmail}</p>
-                      <p>Phone: {selectedInvoice.brandPhone}</p>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-2">Bill To:</h3>
-                      <p className="font-bold">{selectedInvoice.customer}</p>
-                      <p>Email: {selectedInvoice.email}</p>
-                      <p>Phone: {selectedInvoice.phone}</p>
-                      {selectedInvoice.trnNumber && <p>TRN: {selectedInvoice.trnNumber}</p>}
-                    </div>
-                  </div>
-
-                  {/* Invoice Details */}
-                  <div className="border rounded-lg overflow-hidden mb-8">
-                    <table className="w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="p-3 text-left">Description</th>
-                          <th className="p-3 text-left">Qty</th>
-                          <th className="p-3 text-left">Unit Price</th>
-                          <th className="p-3 text-left">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b">
-                          <td className="p-3">{selectedInvoice.service}</td>
-                          <td className="p-3">1</td>
-                          <td className="p-3">{formatCurrency(selectedInvoice.price)}</td>
-                          <td className="p-3">{formatCurrency(selectedInvoice.price)}</td>
-                        </tr>
-                        {selectedInvoice.products.map((product, index) => (
-                          <tr key={index} className="border-b">
-                            <td className="p-3">{product.name}</td>
-                            <td className="p-3">{product.quantity}</td>
-                            <td className="p-3">{formatCurrency(product.price)}</td>
-                            <td className="p-3">{formatCurrency(product.price * product.quantity)}</td>
-                          </tr>
-                        ))}
-                        {selectedInvoice.serviceCharges > 0 && (
-                          <tr className="border-b">
-                            <td className="p-3">Service Charges</td>
-                            <td className="p-3">1</td>
-                            <td className="p-3">{formatCurrency(selectedInvoice.serviceCharges)}</td>
-                            <td className="p-3">{formatCurrency(selectedInvoice.serviceCharges)}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="flex justify-end">
-                    <div className="w-64 space-y-2">
-                      <div className="flex justify-between">
-                        <span>Subtotal:</span>
-                        <span>{formatCurrency(selectedInvoice.price + selectedInvoice.products.reduce((sum, p) => sum + (p.price * p.quantity), 0) + selectedInvoice.serviceCharges)}</span>
-                      </div>
-                      <div className="flex justify-between text-green-600">
-                        <span>Discount:</span>
-                        <span>-{formatCurrency(selectedInvoice.discount)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Tax ({selectedInvoice.tax}%):</span>
-                        <span>{formatCurrency(selectedInvoice.tax)}</span>
-                      </div>
-                      <div className="border-t pt-2 mt-2">
-                        <div className="flex justify-between font-bold text-lg">
-                          <span>Total:</span>
-                          <span>{formatCurrency(selectedInvoice.price)}</span>
+                {/* Template Selection for Preview */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <Label className="mb-2 block">Select Template to Preview</Label>
+                  <Select value={previewTemplate} onValueChange={(value: TemplateType) => setPreviewTemplate(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="classic">
+                        <div className="flex items-center gap-2">
+                          <Layout className="w-4 h-4" />
+                          Classic Template
                         </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="mt-12 pt-8 border-t text-center text-gray-600 text-sm">
-                    <p>Thank you for your business!</p>
-                    <p className="mt-1">Invoice generated on {new Date().toLocaleDateString()}</p>
+                      </SelectItem>
+                      <SelectItem value="modern">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />
+                          Modern Template
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="professional">
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="w-4 h-4" />
+                          Professional Template
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="colorful">
+                        <div className="flex items-center gap-2">
+                          <Palette className="w-4 h-4" />
+                          Colorful Template
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="minimal">
+                        <div className="flex items-center gap-2">
+                          <Minimize2 className="w-4 h-4" />
+                          Minimal Template
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  <div className="mt-3 text-sm text-gray-500">
+                    Previewing: <span className="font-medium capitalize">{previewTemplate}</span> template
                   </div>
                 </div>
 
-                <div className="flex gap-4 justify-end mt-6">
+                {/* Preview Info */}
+                <div className="bg-white p-6 rounded-lg border shadow-sm mb-6">
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Invoice Number</p>
+                      <p className="font-medium">{selectedInvoice.invoiceNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Customer</p>
+                      <p className="font-medium">{selectedInvoice.customer}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Date</p>
+                      <p className="font-medium">{selectedInvoice.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Total Amount</p>
+                      <p className="font-medium">{formatCurrency(selectedInvoice.price)}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center text-gray-400 italic">
+                    PDF preview is generated on download. Template preview shows in the actual PDF.
+                  </div>
+                </div>
+
+                <div className="flex gap-4 justify-end">
                   <Button
                     variant="outline"
                     onClick={() => setShowPreview(false)}
@@ -1579,12 +2212,37 @@ export default function SuperAdminInvoices() {
                     Close
                   </Button>
                   <Button
-                    onClick={() => generateInvoicePDF(selectedInvoice, true)}
+                    onClick={() => generateInvoicePDF(selectedInvoice, previewTemplate, true)}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    Download PDF
+                    Download {previewTemplate} PDF
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline">
+                        <Download className="w-4 h-4 mr-2" />
+                        All Templates
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => generateInvoicePDF(selectedInvoice, 'classic', true)}>
+                        Classic Template
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => generateInvoicePDF(selectedInvoice, 'modern', true)}>
+                        Modern Template
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => generateInvoicePDF(selectedInvoice, 'professional', true)}>
+                        Professional Template
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => generateInvoicePDF(selectedInvoice, 'colorful', true)}>
+                        Colorful Template
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => generateInvoicePDF(selectedInvoice, 'minimal', true)}>
+                        Minimal Template
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             )}

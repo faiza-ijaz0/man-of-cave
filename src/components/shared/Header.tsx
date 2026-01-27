@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Scissors } from "lucide-react";
+import { Scissors,ArrowLeft } from "lucide-react";
+import { Arrow } from "@radix-ui/react-select";
 
 export function Header() {
   return (
     <header className="fixed top-0 w-full bg-white/95 backdrop-blur-md border-b border-secondary/10 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+       <Link href="/customer/portal" className="-mr-10">
+  <ArrowLeft className="text-lg" />
+</Link>
         <Link href="/" className="flex items-center gap-2 group">
           <div className="w-10 h-10 bg-primary flex items-center justify-center rounded-lg transition-all duration-300 group-hover:rotate-12 group-hover:scale-110 shadow-md">
             <Scissors className="w-5 h-5 text-secondary" />

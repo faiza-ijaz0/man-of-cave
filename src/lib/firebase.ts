@@ -34,14 +34,15 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth"; // ✅ Authentication import karein
+import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage"; // ✅ Storage import karein
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAHY1jsIzEBwyJTQ6RRUiVDXRQ9CYEXqNU",
   authDomain: "manofcave-v1.firebaseapp.com",
   projectId: "manofcave-v1",
-  storageBucket: "manofcave-v1.firebasestorage.app",
+  storageBucket: "manofcave-v1.firebasestorage.app", // ✅ Storage bucket hai
   messagingSenderId: "886275055938",
   appId: "1:886275055938:web:15926c5f0c5d967e04e8db",
   measurementId: "G-5EBK1WG97T"
@@ -55,6 +56,9 @@ export const db = getFirestore(app);
 
 // ✅ Initialize Firebase Authentication
 export const auth = getAuth(app);
+
+// ✅ Initialize Firebase Storage - YEH IMPORTANT LINE ADD KAREIN
+export const storage = getStorage(app);
 
 // Initialize Analytics (optional, only if you need it)
 let analytics;

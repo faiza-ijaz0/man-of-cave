@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,12 @@ import {
   Tag,
   Building,
   MapPin,
-  GitBranch
+  GitBranch,
+  Bell,
+  X,
+  Check,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -46,9 +51,9 @@ import { AdminSidebar, AdminMobileSidebar } from "@/components/admin/AdminSideba
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { db } from '@/lib/firebase';
-import { collection, query, getDocs, updateDoc, doc, where, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, getDocs, updateDoc, doc, where, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
 
-// Firebase Feedback Interface - UPDATED WITH ALL FIELDS
+// Firebase Feedback Interface
 interface Feedback {
   id: string;
   comment: string;
@@ -85,6 +90,448 @@ interface Feedback {
   productUpdatedAt?: any;
 }
 
+// Notification Interface
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  feedbackId?: string;
+  rating?: number;
+  read: boolean;
+  type: 'new_feedback' | 'status_update' | 'reply_added';
+}
+
+// Create context with proper types
+interface NotificationContextType {
+  notifications: Notification[];
+  unreadCount: number;
+  addNotification: (notificationData: Omit<Notification, 'id' | 'time' | 'read'>) => void;
+  removeNotification: (id: string) => void;
+  markAsRead: () => void;
+  clearAllNotifications: () => void;
+  playSound: boolean;
+  toggleSound: () => void;
+  initialLoad: boolean;
+  setInitialLoadComplete: () => void;
+  lastNotificationId: string | null;
+}
+
+// Create and export the context
+const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+
+// Custom hook for notifications - MUST be defined after NotificationProvider
+const useNotifications = () => {
+  const context = useContext(NotificationContext);
+  if (!context) {
+    throw new Error('useNotifications must be used within NotificationProvider');
+  }
+  return context;
+};
+
+// Notification Provider Component
+const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [playSound, setPlaySound] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [lastNotificationId, setLastNotificationId] = useState<string | null>(null);
+
+  // Load notifications from localStorage on mount
+  useEffect(() => {
+    const savedNotifications = localStorage.getItem('feedback_notifications');
+    const savedSoundPreference = localStorage.getItem('notification_sound');
+    
+    if (savedNotifications) {
+      try {
+        const parsed = JSON.parse(savedNotifications);
+        setNotifications(parsed);
+        setUnreadCount(parsed.filter((n: Notification) => !n.read).length);
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+      }
+    }
+    
+    if (savedSoundPreference) {
+      setPlaySound(savedSoundPreference === 'true');
+    }
+    
+    // Request browser notification permission
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Save notifications to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('feedback_notifications', JSON.stringify(notifications));
+    setUnreadCount(notifications.filter(n => !n.read).length);
+  }, [notifications]);
+
+  // Save sound preference
+  useEffect(() => {
+    localStorage.setItem('notification_sound', playSound.toString());
+  }, [playSound]);
+
+  const addNotification = (notificationData: Omit<Notification, 'id' | 'time' | 'read'>) => {
+    const newNotification: Notification = {
+      ...notificationData,
+      id: Date.now().toString(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: false
+    };
+
+    setNotifications(prev => [newNotification, ...prev.slice(0, 49)]); // Keep only last 50 notifications
+    setLastNotificationId(newNotification.id);
+
+    // Play sound if enabled
+    if (playSound) {
+      playNotificationSound();
+    }
+
+    // Show browser notification if permission granted
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(newNotification.title, {
+          body: newNotification.message,
+          icon: '/favicon.ico',
+          tag: 'feedback-notification'
+        });
+      } catch (error) {
+        console.log('Browser notification error:', error);
+      }
+    }
+
+    // Auto remove notification after 15 seconds
+    setTimeout(() => {
+      removeNotification(newNotification.id);
+    }, 15000);
+  };
+
+  const playNotificationSound = () => {
+    // Create a simple notification sound
+    try {
+      // Try to play a simple beep using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (e) {
+      console.log('Audio not supported or blocked');
+    }
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const markAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
+  const toggleSound = () => {
+    setPlaySound(!playSound);
+  };
+
+  const setInitialLoadComplete = () => {
+    setInitialLoad(false);
+  };
+
+  const value: NotificationContextType = {
+    notifications,
+    unreadCount,
+    addNotification,
+    removeNotification,
+    markAsRead,
+    clearAllNotifications,
+    playSound,
+    toggleSound,
+    initialLoad,
+    setInitialLoadComplete,
+    lastNotificationId
+  };
+
+  return (
+    <NotificationContext.Provider value={value}>
+      {children}
+    </NotificationContext.Provider>
+  );
+};
+
+// Notification Bell Component
+const NotificationBell = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const {
+    notifications,
+    unreadCount,
+    addNotification,
+    removeNotification,
+    markAsRead,
+    clearAllNotifications,
+    playSound,
+    toggleSound
+  } = useNotifications();
+
+  const handleBellClick = () => {
+    setIsOpen(!isOpen);
+    if (!isOpen) {
+      markAsRead();
+    }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    if (notification.feedbackId) {
+      const element = document.getElementById(`feedback-${notification.feedbackId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+        element.classList.add('bg-yellow-50', 'ring-2', 'ring-yellow-400');
+        setTimeout(() => {
+          element.classList.remove('bg-yellow-50', 'ring-2', 'ring-yellow-400');
+        }, 3000);
+      }
+    }
+    removeNotification(notification.id);
+  };
+
+  // Test notification function
+  const testNotification = () => {
+    addNotification({
+      title: 'Test Notification ✅',
+      message: 'Notification system is working perfectly!',
+      type: 'new_feedback',
+      feedbackId: 'test',
+      rating: 5
+    });
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleBellClick}
+        className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+      >
+        <Bell className="w-6 h-6 text-gray-600" />
+        {unreadCount > 0 && (
+          <span className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border z-50 animate-in slide-in-from-top-5">
+          <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-gray-800">Notifications</h3>
+              {unreadCount > 0 && (
+                <Badge className="bg-red-500 text-white rounded-full px-2 py-0.5 text-xs">
+                  {unreadCount} new
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleSound}
+                className="p-1 rounded-full hover:bg-gray-200"
+                title={playSound ? "Mute notifications" : "Unmute notifications"}
+              >
+                {playSound ? (
+                  <Volume2 className="w-4 h-4 text-green-600" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-gray-500" />
+                )}
+              </button>
+              <button
+                onClick={testNotification}
+                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                title="Test notification"
+              >
+                Test
+              </button>
+              {notifications.length > 0 && (
+                <button
+                  onClick={clearAllNotifications}
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  Clear All
+                </button>
+              )}
+              <button
+                onClick={handleBellClick}
+                className="p-1 hover:bg-gray-200 rounded-full"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="max-h-96 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="p-8 text-center">
+                <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No notifications yet</p>
+                <p className="text-sm text-gray-400 mt-1">You'll get notified when new feedback arrives</p>
+              </div>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-4 border-b hover:bg-gray-50 cursor-pointer transition-colors ${
+                    !notification.read ? 'bg-blue-50' : ''
+                  }`}
+                  onClick={() => handleNotificationClick(notification)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {notification.type === 'new_feedback' && (
+                          <MessageSquare className="w-4 h-4 text-blue-600" />
+                        )}
+                        {notification.type === 'status_update' && (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        )}
+                        {notification.type === 'reply_added' && (
+                          <Reply className="w-4 h-4 text-purple-600" />
+                        )}
+                        <p className="font-semibold text-gray-800">{notification.title}</p>
+                        {notification.rating && (
+                          <div className="flex items-center">
+                            <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                            <span className="text-xs ml-1">{notification.rating}</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1">{notification.message}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-400">{notification.time}</p>
+                        {!notification.read && (
+                          <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeNotification(notification.id);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 ml-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          {notifications.length > 0 && (
+            <div className="p-3 border-t bg-gray-50 flex justify-between items-center">
+              <button
+                onClick={markAsRead}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                <Check className="w-4 h-4" />
+                Mark all as read
+              </button>
+              <span className="text-xs text-gray-500">
+                {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Real-time Feedback Listener Component
+const FeedbackListener = () => {
+  const { addNotification, initialLoad, setInitialLoadComplete } = useNotifications();
+  const [lastProcessedId, setLastProcessedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Set initial load complete after 3 seconds
+    const timer = setTimeout(() => {
+      setInitialLoadComplete();
+    }, 3000);
+
+    // Setup real-time listener for feedbacks
+    const feedbacksRef = collection(db, 'feedbacks');
+    const q = query(feedbacksRef, orderBy('createdAt', 'desc'));
+    
+    console.log('Setting up Firebase real-time listener...');
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log('Firebase snapshot received:', snapshot.size, 'feedbacks');
+      
+      snapshot.docChanges().forEach((change) => {
+        console.log('Change detected:', change.type, 'for doc:', change.doc.id);
+        
+        if (change.type === 'added') {
+          const newFeedback = change.doc.data();
+          const feedbackId = change.doc.id;
+          
+          // Skip if this is the initial load or we've already processed this ID
+          if (initialLoad) {
+            console.log('Initial load - skipping notification');
+            setLastProcessedId(feedbackId);
+            return;
+          }
+          
+          if (feedbackId === lastProcessedId) {
+            console.log('Already processed this feedback:', feedbackId);
+            return;
+          }
+          
+          console.log('New feedback detected:', {
+            id: feedbackId,
+            customerName: newFeedback.customerName,
+            rating: newFeedback.rating,
+            comment: newFeedback.comment?.substring(0, 50) + '...'
+          });
+          
+          // Add notification for new feedback
+          addNotification({
+            title: '🌟 New Feedback Received!',
+            message: `${newFeedback.customerName} gave ${newFeedback.rating} ⭐ for "${newFeedback.serviceOrProduct}"`,
+            type: 'new_feedback',
+            feedbackId: feedbackId,
+            rating: newFeedback.rating
+          });
+          
+          setLastProcessedId(feedbackId);
+        }
+      });
+    }, (error) => {
+      console.error('Firebase listener error:', error);
+    });
+
+    // Cleanup
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [initialLoad, lastProcessedId, addNotification, setInitialLoadComplete]);
+
+  return null; // This component doesn't render anything
+};
+
+// Main AdminFeedbackPage Component
 export default function AdminFeedbackPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -99,6 +546,8 @@ export default function AdminFeedbackPage() {
   const [filterType, setFilterType] = useState('all');
   const [filterRating, setFilterRating] = useState('all');
   const [activeTab, setActiveTab] = useState('overview');
+
+  const { addNotification } = useNotifications();
 
   // Stats states
   const [stats, setStats] = useState({
@@ -119,10 +568,57 @@ export default function AdminFeedbackPage() {
     router.push('/login');
   };
 
-  // Fetch feedbacks from Firebase
+  // Fetch feedbacks from Firebase - Initial Load
   useEffect(() => {
     fetchFeedbacks();
   }, []);
+
+  // Real-time listener for status updates
+  useEffect(() => {
+    if (loading) return; // Don't setup listener until initial load is complete
+    
+    const feedbacksRef = collection(db, 'feedbacks');
+    const q = query(feedbacksRef, orderBy('createdAt', 'desc'));
+    
+    console.log('Setting up status change listener...');
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        // Check for modified feedbacks (status updates, replies, etc.)
+        if (change.type === 'modified') {
+          const updatedFeedback = change.doc.data();
+          const feedbackId = change.doc.id;
+          
+          // Find the old feedback to compare
+          const oldFeedback = feedbacks.find(f => f.id === feedbackId);
+          
+          if (oldFeedback) {
+            // Check if status changed
+            if (oldFeedback.status !== updatedFeedback.status) {
+              addNotification({
+                title: `Feedback ${updatedFeedback.status === 'approved' ? '✅ Approved' : '❌ Rejected'}`,
+                message: `Feedback from ${updatedFeedback.customerName} has been ${updatedFeedback.status}`,
+                type: 'status_update',
+                feedbackId: feedbackId
+              });
+            }
+            
+            // Check if admin reply was added
+            if (!oldFeedback.adminReply && updatedFeedback.adminReply) {
+              addNotification({
+                title: '💬 Reply Sent!',
+                message: `You replied to ${updatedFeedback.customerName}'s feedback`,
+                type: 'reply_added',
+                feedbackId: feedbackId
+              });
+            }
+          }
+        }
+      });
+    });
+    
+    return () => unsubscribe();
+  }, [loading, feedbacks, addNotification]);
 
   const fetchFeedbacks = async () => {
     try {
@@ -187,14 +683,6 @@ export default function AdminFeedbackPage() {
       setFeedbacks(feedbacksData);
       updateStats(feedbacksData, totalProducts, totalRevenue, totalSold);
       
-      // Debug log
-      console.log('Fetched feedbacks:', feedbacksData.length);
-      if (feedbacksData.length > 0) {
-        console.log('Sample feedback:', feedbacksData[0]);
-        console.log('Branch names:', feedbacksData[0].productBranchNames);
-        console.log('Product branches:', feedbacksData[0].productBranches);
-      }
-      
     } catch (error) {
       console.error('Error fetching feedbacks:', error);
     } finally {
@@ -235,6 +723,16 @@ export default function AdminFeedbackPage() {
         updatedAt: Timestamp.now()
       });
       
+      const feedback = feedbacks.find(f => f.id === id);
+      if (feedback) {
+        addNotification({
+          title: `Feedback ${status === 'approved' ? '✅ Approved' : '❌ Rejected'}`,
+          message: `Feedback from ${feedback.customerName} has been ${status}`,
+          type: 'status_update',
+          feedbackId: id
+        });
+      }
+      
       setFeedbacks(feedbacks.map(f => 
         f.id === id ? { ...f, status } : f
       ));
@@ -262,6 +760,16 @@ export default function AdminFeedbackPage() {
         adminReply,
         updatedAt: Timestamp.now()
       });
+      
+      const feedback = feedbacks.find(f => f.id === id);
+      if (feedback) {
+        addNotification({
+          title: '💬 Reply Sent!',
+          message: `You replied to ${feedback.customerName}'s feedback`,
+          type: 'reply_added',
+          feedbackId: id
+        });
+      }
       
       setFeedbacks(feedbacks.map(f => 
         f.id === id ? { ...f, adminReply } : f
@@ -390,670 +898,671 @@ export default function AdminFeedbackPage() {
 
   return (
     <ProtectedRoute requiredRole="super_admin">
-      <div className="flex h-screen bg-[#f8f9fa]">
-        {/* Sidebar */}
-        <AdminSidebar
-          role="super_admin"
-          onLogout={handleLogout}
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
-        />
+      <NotificationProvider>
+        {/* Real-time Feedback Listener */}
+        <FeedbackListener />
+        
+        <div className="flex h-screen bg-[#f8f9fa]">
+          {/* Sidebar */}
+          <AdminSidebar
+            role="super_admin"
+            onLogout={handleLogout}
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen(!sidebarOpen)}
+          />
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0">
-          {/* Header */}
-          <header className="bg-white border-b border-gray-200 shrink-0">
-            <div className="flex items-center justify-between px-4 py-4 lg:px-8">
-              <div className="flex items-center gap-4">
-                <AdminMobileSidebar
-                  role="super_admin"
-                  onLogout={handleLogout}
-                  isOpen={sidebarOpen}
-                  onToggle={() => setSidebarOpen(!sidebarOpen)}
-                />
-                <div>
-                  <h1 className="text-2xl font-serif font-bold text-primary">Customer Feedback Management</h1>
-                  <p className="text-sm text-muted-foreground">Manage and respond to customer reviews and feedback</p>
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out min-h-0">
+            {/* Header */}
+            <header className="bg-white border-b border-gray-200 shrink-0">
+              <div className="flex items-center justify-between px-4 py-4 lg:px-8">
+                <div className="flex items-center gap-4">
+                  <AdminMobileSidebar
+                    role="super_admin"
+                    onLogout={handleLogout}
+                    isOpen={sidebarOpen}
+                    onToggle={() => setSidebarOpen(!sidebarOpen)}
+                  />
+                  <div>
+                    <h1 className="text-2xl font-serif font-bold text-primary">Customer Feedback Management</h1>
+                    <p className="text-sm text-muted-foreground">Manage and respond to customer reviews and feedback</p>
+                  </div>
                 </div>
+                
+                {/* Notification Bell in Header */}
+                <NotificationBell />
               </div>
-            </div>
-          </header>
+            </header>
 
-          {/* Page Content */}
-          <div className="flex-1 overflow-auto p-4 lg:p-8">
-            <div className="max-w-7xl mx-auto">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-2 rounded-lg">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="feedbacks">All Feedback ({feedbacks.length})</TabsTrigger>
-                </TabsList>
+            {/* Page Content */}
+            <div className="flex-1 overflow-auto p-4 lg:p-8">
+              <div className="max-w-7xl mx-auto">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+                  <TabsList className="grid w-full grid-cols-2 rounded-lg">
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="feedbacks">All Feedback ({feedbacks.length})</TabsTrigger>
+                  </TabsList>
 
-                {/* Overview Tab */}
-                <TabsContent value="overview" className="space-y-6">
-                  {/* Stats Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Feedback</p>
-                            <p className="text-3xl font-serif font-bold text-primary">{stats.total}</p>
-                            <p className="text-sm text-muted-foreground mt-1">All time reviews</p>
-                          </div>
-                          <MessageSquare className="w-12 h-12 text-secondary/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Average Rating</p>
-                            <div className="flex items-center gap-2">
-                              <p className="text-3xl font-serif font-bold text-primary">{stats.averageRating}/5</p>
-                              <div className="flex">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <Star
-                                    key={star}
-                                    className={cn(
-                                      "w-4 h-4",
-                                      star <= Math.round(stats.averageRating) 
-                                        ? "fill-yellow-500 text-yellow-500" 
-                                        : "text-gray-300"
-                                    )}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">Overall satisfaction</p>
-                          </div>
-                          <Star className="w-12 h-12 text-yellow-500/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Pending Reviews</p>
-                            <p className="text-3xl font-serif font-bold text-yellow-600">{stats.pending}</p>
-                            <p className="text-sm text-muted-foreground mt-1">Awaiting action</p>
-                          </div>
-                          <Clock className="w-12 h-12 text-yellow-500/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Approved Rate</p>
-                            <p className="text-3xl font-serif font-bold text-green-600">
-                              {stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0}%
-                            </p>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {stats.approved} of {stats.total} approved
-                            </p>
-                          </div>
-                          <ThumbsUp className="w-12 h-12 text-green-500/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Product Stats Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Products</p>
-                            <p className="text-3xl font-serif font-bold text-purple-600">{stats.totalProducts}</p>
-                            <p className="text-sm text-muted-foreground mt-1">Product feedbacks</p>
-                          </div>
-                          <Package className="w-12 h-12 text-purple-500/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Sold</p>
-                            <p className="text-3xl font-serif font-bold text-blue-600">{stats.totalSold}</p>
-                            <p className="text-sm text-muted-foreground mt-1">Units sold</p>
-                          </div>
-                          <ShoppingBag className="w-12 h-12 text-blue-500/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Product Revenue</p>
-                            <p className="text-3xl font-serif font-bold text-green-600">${stats.totalRevenue.toFixed(2)}</p>
-                            <p className="text-sm text-muted-foreground mt-1">From reviewed products</p>
-                          </div>
-                          <DollarSign className="w-12 h-12 text-green-500/20" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Distribution Cards */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Status Distribution */}
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardHeader>
-                        <CardTitle className="text-lg font-serif flex items-center gap-2">
-                          <BarChart3 className="w-5 h-5 text-secondary" />
-                          Status Distribution
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
+                  {/* Overview Tab */}
+                  <TabsContent value="overview" className="space-y-6">
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                              <span className="text-sm">Pending</span>
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Feedback</p>
+                              <p className="text-3xl font-serif font-bold text-primary">{stats.total}</p>
+                              <p className="text-sm text-muted-foreground mt-1">All time reviews</p>
                             </div>
-                            <span className="font-bold">{stats.pending} ({stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0}%)</span>
+                            <MessageSquare className="w-12 h-12 text-secondary/20" />
                           </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                              <span className="text-sm">Approved</span>
-                            </div>
-                            <span className="font-bold">{stats.approved} ({stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0}%)</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                              <span className="text-sm">Rejected</span>
-                            </div>
-                            <span className="font-bold">{stats.rejected} ({stats.total > 0 ? Math.round((stats.rejected / stats.total) * 100) : 0}%)</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
 
-                    {/* Type Distribution */}
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardHeader>
-                        <CardTitle className="text-lg font-serif flex items-center gap-2">
-                          <TrendingUp className="w-5 h-5 text-secondary" />
-                          Type Distribution
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                              <span className="text-sm">Services</span>
-                            </div>
-                            <span className="font-bold">{stats.services} ({stats.total > 0 ? Math.round((stats.services / stats.total) * 100) : 0}%)</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                              <span className="text-sm">Products</span>
-                            </div>
-                            <span className="font-bold">{stats.products} ({stats.total > 0 ? Math.round((stats.products / stats.total) * 100) : 0}%)</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Rating Distribution */}
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardHeader>
-                        <CardTitle className="text-lg font-serif flex items-center gap-2">
-                          <Star className="w-5 h-5 text-secondary" />
-                          Rating Distribution
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {[5, 4, 3, 2, 1].map(rating => {
-                            const count = feedbacks.filter(f => f.rating === rating).length;
-                            const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
-                            return (
-                              <div key={rating} className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex">
-                                      {[1, 2, 3, 4, 5].map(star => (
-                                        <Star
-                                          key={star}
-                                          className={cn(
-                                            "w-4 h-4",
-                                            star <= rating 
-                                              ? "fill-yellow-500 text-yellow-500" 
-                                              : "text-gray-300"
-                                          )}
-                                        />
-                                      ))}
-                                    </div>
-                                    <span className="text-sm">{rating} stars</span>
-                                  </div>
-                                  <span className="font-bold">{count}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className="bg-yellow-500 h-2 rounded-full" 
-                                    style={{ width: `${percentage}%` }}
-                                  ></div>
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Average Rating</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-3xl font-serif font-bold text-primary">{stats.averageRating}/5</p>
+                                <div className="flex">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Star
+                                      key={star}
+                                      className={cn(
+                                        "w-4 h-4",
+                                        star <= Math.round(stats.averageRating) 
+                                          ? "fill-yellow-500 text-yellow-500" 
+                                          : "text-gray-300"
+                                      )}
+                                    />
+                                  ))}
                                 </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </TabsContent>
-
-                {/* Feedbacks Tab */}
-                <TabsContent value="feedbacks" className="space-y-6">
-                  {/* Filters and Search */}
-                  <div className="flex flex-col lg:flex-row gap-4 mb-8">
-                    <div className="flex-1 flex gap-2">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                        <Input
-                          placeholder="Search by customer, product, SKU, branch, or comment..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-10 rounded-lg border-gray-200"
-                        />
-                      </div>
-                      
-                      <Select value={filterStatus} onValueChange={setFilterStatus}>
-                        <SelectTrigger className="w-40 rounded-lg border-gray-200">
-                          <div className="flex items-center gap-2">
-                            <Filter className="w-4 h-4" />
-                            <SelectValue placeholder="Status" />
+                              <p className="text-sm text-muted-foreground mt-1">Overall satisfaction</p>
+                            </div>
+                            <Star className="w-12 h-12 text-yellow-500/20" />
                           </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="approved">Approved</SelectItem>
-                          <SelectItem value="rejected">Rejected</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        </CardContent>
+                      </Card>
 
-                      <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger className="w-40 rounded-lg border-gray-200">
-                          <SelectValue placeholder="Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="service">Service</SelectItem>
-                          <SelectItem value="product">Product</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Pending Reviews</p>
+                              <p className="text-3xl font-serif font-bold text-yellow-600">{stats.pending}</p>
+                              <p className="text-sm text-muted-foreground mt-1">Awaiting action</p>
+                            </div>
+                            <Clock className="w-12 h-12 text-yellow-500/20" />
+                          </div>
+                        </CardContent>
+                      </Card>
 
-                      <Select value={filterRating} onValueChange={setFilterRating}>
-                        <SelectTrigger className="w-40 rounded-lg border-gray-200">
-                          <SelectValue placeholder="Rating" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Ratings</SelectItem>
-                          <SelectItem value="5">5 Stars</SelectItem>
-                          <SelectItem value="4">4 Stars</SelectItem>
-                          <SelectItem value="3">3 Stars</SelectItem>
-                          <SelectItem value="2">2 Stars</SelectItem>
-                          <SelectItem value="1">1 Star</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Approved Rate</p>
+                              <p className="text-3xl font-serif font-bold text-green-600">
+                                {stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0}%
+                              </p>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {stats.approved} of {stats.total} approved
+                              </p>
+                            </div>
+                            <ThumbsUp className="w-12 h-12 text-green-500/20" />
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={fetchFeedbacks}
-                        variant="outline"
-                        className="border-gray-200 rounded-lg flex items-center gap-2"
-                      >
-                        <Loader2 className="w-4 h-4" /> Refresh
-                      </Button>
-                      <Button
-                        onClick={downloadCSV}
-                        variant="outline"
-                        className="border-gray-200 rounded-lg flex items-center gap-2"
-                      >
-                        <Download className="w-4 h-4" /> Export CSV
-                      </Button>
+                    {/* Product Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Products</p>
+                              <p className="text-3xl font-serif font-bold text-purple-600">{stats.totalProducts}</p>
+                              <p className="text-sm text-muted-foreground mt-1">Product feedbacks</p>
+                            </div>
+                            <Package className="w-12 h-12 text-purple-500/20" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Total Sold</p>
+                              <p className="text-3xl font-serif font-bold text-blue-600">{stats.totalSold}</p>
+                              <p className="text-sm text-muted-foreground mt-1">Units sold</p>
+                            </div>
+                            <ShoppingBag className="w-12 h-12 text-blue-500/20" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Product Revenue</p>
+                              <p className="text-3xl font-serif font-bold text-green-600">${stats.totalRevenue.toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground mt-1">From reviewed products</p>
+                            </div>
+                            <DollarSign className="w-12 h-12 text-green-500/20" />
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
-                  </div>
 
-                  {/* Loading State */}
-                  {loading ? (
-                    <div className="text-center py-12">
-                      <Loader2 className="w-12 h-12 animate-spin text-secondary mx-auto mb-4" />
-                      <p className="text-lg font-serif text-primary">Loading feedbacks...</p>
-                    </div>
-                  ) : filteredFeedbacks.length === 0 ? (
-                    <Card className="border-none shadow-sm rounded-xl">
-                      <CardContent className="py-12 text-center">
-                        <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold text-gray-700 mb-2">No feedbacks found</h3>
-                        <p className="text-gray-500">Try adjusting your filters or search query</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="space-y-4">
-                      {filteredFeedbacks.map((feedback) => (
-                        <Card key={feedback.id} className="border-none shadow-sm rounded-xl overflow-hidden">
-                          <CardContent className="p-6">
-                            <div className="flex flex-col lg:flex-row gap-6">
-                              {/* Left Column - Customer Info & Rating */}
-                              <div className="lg:w-1/4 space-y-4">
-                                {/* Customer Info */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <User className="w-4 h-4 text-gray-500" />
-                                    <span className="font-semibold">{feedback.customerName}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Mail className="w-4 h-4 text-gray-500" />
-                                    <span className="text-sm text-gray-600 truncate">{feedback.customerEmail}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Calendar className="w-4 h-4 text-gray-500" />
-                                    <span className="text-sm text-gray-500">{formatDate(feedback.createdAt)}</span>
-                                  </div>
-                                  <div className="text-xs text-gray-400">
-                                    {getTimeAgo(feedback.createdAt)}
-                                  </div>
-                                  
-                                  {/* Points Awarded */}
-                                  
-                                  
-                                
-                                </div>
-
-                                {/* Rating */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex">
-                                      {[1, 2, 3, 4, 5].map((star) => (
-                                        <Star
-                                          key={star}
-                                          className={cn(
-                                            "w-4 h-4",
-                                            star <= feedback.rating 
-                                              ? "fill-yellow-500 text-yellow-500" 
-                                              : "text-gray-300"
-                                          )}
-                                        />
-                                      ))}
-                                    </div>
-                                    <Badge className={cn("rounded-full", getRatingColor(feedback.rating))}>
-                                      {feedback.rating}/5
-                                    </Badge>
-                                  </div>
-                                </div>
-
-                                {/* Type Badge */}
-                                <Badge className={cn("rounded-full", getTypeColor(feedback.type))}>
-                                  {feedback.type === 'service' ? 'Service' : 'Product'}
-                                </Badge>
-
-                                {/* Status Badge */}
-                                <Badge className={cn("rounded-full", getStatusColor(feedback.status))}>
-                                  {feedback.status}
-                                </Badge>
+                    {/* Distribution Cards */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Status Distribution */}
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardHeader>
+                          <CardTitle className="text-lg font-serif flex items-center gap-2">
+                            <BarChart3 className="w-5 h-5 text-secondary" />
+                            Status Distribution
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                <span className="text-sm">Pending</span>
                               </div>
+                              <span className="font-bold">{stats.pending} ({stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0}%)</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                <span className="text-sm">Approved</span>
+                              </div>
+                              <span className="font-bold">{stats.approved} ({stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0}%)</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                <span className="text-sm">Rejected</span>
+                              </div>
+                              <span className="font-bold">{stats.rejected} ({stats.total > 0 ? Math.round((stats.rejected / stats.total) * 100) : 0}%)</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
 
-                              {/* Middle Column - Content */}
-                              <div className="lg:w-1/2 space-y-4">
-                                {/* Service/Product */}
-                                <div>
-                                  <h3 className="font-serif font-bold text-lg text-primary mb-2">
-                                    {feedback.serviceOrProduct}
-                                  </h3>
-                                  
-                                  {/* Branch Names Section - NEW */}
-                                  {feedback.productBranchNames && feedback.productBranchNames.length > 0 && (
-                                    <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                                      <div className="flex items-center gap-2 mb-3">
-                                        <GitBranch className="w-5 h-5 text-blue-600" />
-                                        <h4 className="font-semibold text-blue-800">Available Branches:</h4>
-                                      </div>
-                                      <div className="flex flex-wrap gap-2">
-                                        {feedback.productBranchNames.map((branchName, index) => (
-                                          <Badge 
-                                            key={index} 
-                                            className={cn("rounded-full flex items-center gap-1", getBranchColor(index))}
-                                          >
-                                            <Building className="w-3 h-3" />
-                                            {branchName}
-                                          </Badge>
+                      {/* Type Distribution */}
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardHeader>
+                          <CardTitle className="text-lg font-serif flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-secondary" />
+                            Type Distribution
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                <span className="text-sm">Services</span>
+                              </div>
+                              <span className="font-bold">{stats.services} ({stats.total > 0 ? Math.round((stats.services / stats.total) * 100) : 0}%)</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                <span className="text-sm">Products</span>
+                              </div>
+                              <span className="font-bold">{stats.products} ({stats.total > 0 ? Math.round((stats.products / stats.total) * 100) : 0}%)</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Rating Distribution */}
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardHeader>
+                          <CardTitle className="text-lg font-serif flex items-center gap-2">
+                            <Star className="w-5 h-5 text-secondary" />
+                            Rating Distribution
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {[5, 4, 3, 2, 1].map(rating => {
+                              const count = feedbacks.filter(f => f.rating === rating).length;
+                              const percentage = stats.total > 0 ? (count / stats.total) * 100 : 0;
+                              return (
+                                <div key={rating} className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex">
+                                        {[1, 2, 3, 4, 5].map(star => (
+                                          <Star
+                                            key={star}
+                                            className={cn(
+                                              "w-4 h-4",
+                                              star <= rating 
+                                                ? "fill-yellow-500 text-yellow-500" 
+                                                : "text-gray-300"
+                                            )}
+                                          />
                                         ))}
                                       </div>
-                                      
-                                     
+                                      <span className="text-sm">{rating} stars</span>
                                     </div>
-                                  )}
-                                  
-                                  {/* Product Details */}
-                                  {feedback.type === 'product' && (
-                                    <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                      <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                                        <div className="flex items-center gap-2">
-                                          <Hash className="w-4 h-4 text-gray-500" />
-                                          <div>
-                                            <span className="font-semibold text-gray-600">SKU:</span>
-                                            <span className="ml-2">{feedback.productSku || 'N/A'}</span>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Tag className="w-4 h-4 text-gray-500" />
-                                          <div>
-                                            <span className="font-semibold text-gray-600">Category:</span>
-                                            <span className="ml-2">{feedback.productCategory || 'N/A'}</span>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <DollarSign className="w-4 h-4 text-gray-500" />
-                                          <div>
-                                            <span className="font-semibold text-gray-600">Price:</span>
-                                            <span className="ml-2">${feedback.productPrice?.toFixed(2) || '0.00'}</span>
-                                          </div>
-                                        </div>
-                                      
-                                       
-                                        <div className="flex items-center gap-2">
-                                          <div>
-                                            <span className="font-semibold text-gray-600">Status:</span>
-                                            <Badge className={`ml-2 ${
-                                              feedback.productStatus === 'active' 
-                                                ? 'bg-green-100 text-green-700' 
-                                                : feedback.productStatus === 'inactive'
-                                                ? 'bg-gray-100 text-gray-700'
-                                                : 'bg-red-100 text-red-700'
-                                            }`}>
-                                              {feedback.productStatus || 'N/A'}
-                                            </Badge>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      
-                                      {/* Product Image */}
-                                      {feedback.productImageUrl && (
-                                        <div className="mt-3">
-                                          <p className="text-sm font-semibold text-gray-600 mb-2">Product Image:</p>
-                                          <img 
-                                            src={feedback.productImageUrl} 
-                                            alt={feedback.productName || 'Product'}
-                                            className="w-32 h-32 object-cover rounded-lg border shadow-sm"
-                                            onError={(e) => {
-                                              const target = e.target as HTMLImageElement;
-                                              target.style.display = 'none';
-                                            }}
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  
-                                  {/* Comment */}
-                                  <div className="bg-gray-50 rounded-lg p-4">
-                                    <p className="text-gray-700 italic">"{feedback.comment}"</p>
+                                    <span className="font-bold">{count}</span>
                                   </div>
-
-                                  {/* Admin Reply */}
-                                  {feedback.adminReply && (
-                                    <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Reply className="w-4 h-4 text-blue-600" />
-                                        <span className="text-sm font-semibold text-blue-900">Admin Response:</span>
-                                      </div>
-                                      <p className="text-blue-800">{feedback.adminReply}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Right Column - Actions */}
-                              <div className="lg:w-1/4 space-y-4">
-                                {/* Action Buttons */}
-                                <div className="space-y-2">
-                                  {feedback.status === 'pending' && (
-                                    <>
-                                      <Button
-                                        onClick={() => handleUpdateStatus(feedback.id, 'approved')}
-                                        disabled={updatingId === feedback.id}
-                                        className="w-full bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
-                                      >
-                                        {updatingId === feedback.id ? (
-                                          <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          <CheckCircle className="w-4 h-4" />
-                                        )}
-                                        Approve
-                                      </Button>
-                                      <Button
-                                        onClick={() => handleUpdateStatus(feedback.id, 'rejected')}
-                                        disabled={updatingId === feedback.id}
-                                        className="w-full bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
-                                      >
-                                        {updatingId === feedback.id ? (
-                                          <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          <XCircle className="w-4 h-4" />
-                                        )}
-                                        Reject
-                                      </Button>
-                                    </>
-                                  )}
-                                  
-                                  {/* Reply Button */}
-                                  {feedback.status === 'approved' && !feedback.adminReply && (
-                                    <Button
-                                      onClick={() => setReplyingTo(feedback.id)}
-                                      variant="outline"
-                                      className="w-full border-blue-200 text-blue-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"
-                                    >
-                                      <Reply className="w-4 h-4" />
-                                      Reply to Customer
-                                    </Button>
-                                  )}
-
-                                 
-                                </div>
-
-                                {/* Quick Reply Form */}
-                                {replyingTo === feedback.id && (
-                                  <div className="space-y-2">
-                                    <Textarea
-                                      placeholder="Type your response to the customer..."
-                                      value={adminReply}
-                                      onChange={(e) => setAdminReply(e.target.value)}
-                                      className="rounded-lg min-h-[100px]"
-                                    />
-                                    <div className="flex gap-2">
-                                      <Button
-                                        onClick={() => handleAddReply(feedback.id)}
-                                        disabled={updatingId === feedback.id}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                                      >
-                                        {updatingId === feedback.id ? (
-                                          <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          'Send Reply'
-                                        )}
-                                      </Button>
-                                      <Button
-                                        onClick={() => {
-                                          setReplyingTo(null);
-                                          setAdminReply('');
-                                        }}
-                                        variant="outline"
-                                        className="rounded-lg"
-                                      >
-                                        Cancel
-                                      </Button>
-                                    </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-yellow-500 h-2 rounded-full" 
+                                      style={{ width: `${percentage}%` }}
+                                    ></div>
                                   </div>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
-                  )}
+                  </TabsContent>
 
-                  {/* Summary Card */}
-                  {filteredFeedbacks.length > 0 && (
-                    <Card className="border-none shadow-sm rounded-xl mt-8">
-                      <CardContent className="p-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="text-center">
-                            <p className="text-sm text-muted-foreground mb-1">Showing</p>
-                            <p className="text-2xl font-bold text-primary">{filteredFeedbacks.length}</p>
-                            <p className="text-xs text-muted-foreground">feedbacks</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-sm text-muted-foreground mb-1">Avg Rating</p>
-                            <p className="text-2xl font-bold text-primary">
-                              {filteredFeedbacks.length > 0 
-                                ? (filteredFeedbacks.reduce((sum, f) => sum + f.rating, 0) / filteredFeedbacks.length).toFixed(2)
-                                : '0.00'
-                              }/5
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-sm text-muted-foreground mb-1">Pending</p>
-                            <p className="text-2xl font-bold text-yellow-600">
-                              {filteredFeedbacks.filter(f => f.status === 'pending').length}
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-sm text-muted-foreground mb-1">Replied</p>
-                            <p className="text-2xl font-bold text-green-600">
-                              {filteredFeedbacks.filter(f => f.adminReply).length}
-                            </p>
-                          </div>
+                  {/* Feedbacks Tab */}
+                  <TabsContent value="feedbacks" className="space-y-6">
+                    {/* Filters and Search */}
+                    <div className="flex flex-col lg:flex-row gap-4 mb-8">
+                      <div className="flex-1 flex gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <Input
+                            placeholder="Search by customer, product, SKU, branch, or comment..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 rounded-lg border-gray-200"
+                          />
                         </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </TabsContent>
-              </Tabs>
+                        
+                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                          <SelectTrigger className="w-40 rounded-lg border-gray-200">
+                            <div className="flex items-center gap-2">
+                              <Filter className="w-4 h-4" />
+                              <SelectValue placeholder="Status" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="rejected">Rejected</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={filterType} onValueChange={setFilterType}>
+                          <SelectTrigger className="w-40 rounded-lg border-gray-200">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Types</SelectItem>
+                            <SelectItem value="service">Service</SelectItem>
+                            <SelectItem value="product">Product</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={filterRating} onValueChange={setFilterRating}>
+                          <SelectTrigger className="w-40 rounded-lg border-gray-200">
+                            <SelectValue placeholder="Rating" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Ratings</SelectItem>
+                            <SelectItem value="5">5 Stars</SelectItem>
+                            <SelectItem value="4">4 Stars</SelectItem>
+                            <SelectItem value="3">3 Stars</SelectItem>
+                            <SelectItem value="2">2 Stars</SelectItem>
+                            <SelectItem value="1">1 Star</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={fetchFeedbacks}
+                          variant="outline"
+                          className="border-gray-200 rounded-lg flex items-center gap-2"
+                        >
+                          <Loader2 className="w-4 h-4" /> Refresh
+                        </Button>
+                        <Button
+                          onClick={downloadCSV}
+                          variant="outline"
+                          className="border-gray-200 rounded-lg flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4" /> Export CSV
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Loading State */}
+                    {loading ? (
+                      <div className="text-center py-12">
+                        <Loader2 className="w-12 h-12 animate-spin text-secondary mx-auto mb-4" />
+                        <p className="text-lg font-serif text-primary">Loading feedbacks...</p>
+                      </div>
+                    ) : filteredFeedbacks.length === 0 ? (
+                      <Card className="border-none shadow-sm rounded-xl">
+                        <CardContent className="py-12 text-center">
+                          <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-700 mb-2">No feedbacks found</h3>
+                          <p className="text-gray-500">Try adjusting your filters or search query</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="space-y-4">
+                        {filteredFeedbacks.map((feedback) => (
+                          <Card 
+                            key={feedback.id} 
+                            id={`feedback-${feedback.id}`}
+                            className="border-none shadow-sm rounded-xl overflow-hidden transition-all hover:shadow-md"
+                          >
+                            <CardContent className="p-6">
+                              <div className="flex flex-col lg:flex-row gap-6">
+                                {/* Left Column - Customer Info & Rating */}
+                                <div className="lg:w-1/4 space-y-4">
+                                  {/* Customer Info */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <User className="w-4 h-4 text-gray-500" />
+                                      <span className="font-semibold">{feedback.customerName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Mail className="w-4 h-4 text-gray-500" />
+                                      <span className="text-sm text-gray-600 truncate">{feedback.customerEmail}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="w-4 h-4 text-gray-500" />
+                                      <span className="text-sm text-gray-500">{formatDate(feedback.createdAt)}</span>
+                                    </div>
+                                    <div className="text-xs text-gray-400">
+                                      {getTimeAgo(feedback.createdAt)}
+                                    </div>
+                                  </div>
+
+                                  {/* Rating */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star
+                                            key={star}
+                                            className={cn(
+                                              "w-4 h-4",
+                                              star <= feedback.rating 
+                                                ? "fill-yellow-500 text-yellow-500" 
+                                                : "text-gray-300"
+                                            )}
+                                          />
+                                        ))}
+                                      </div>
+                                      <Badge className={cn("rounded-full", getRatingColor(feedback.rating))}>
+                                        {feedback.rating}/5
+                                      </Badge>
+                                    </div>
+                                  </div>
+
+                                  {/* Type Badge */}
+                                  <Badge className={cn("rounded-full", getTypeColor(feedback.type))}>
+                                    {feedback.type === 'service' ? 'Service' : 'Product'}
+                                  </Badge>
+
+                                  {/* Status Badge */}
+                                  <Badge className={cn("rounded-full", getStatusColor(feedback.status))}>
+                                    {feedback.status}
+                                  </Badge>
+                                </div>
+
+                                {/* Middle Column - Content */}
+                                <div className="lg:w-1/2 space-y-4">
+                                  {/* Service/Product */}
+                                  <div>
+                                    <h3 className="font-serif font-bold text-lg text-primary mb-2">
+                                      {feedback.serviceOrProduct}
+                                    </h3>
+                                    
+                                    {/* Branch Names Section */}
+                                    {feedback.productBranchNames && feedback.productBranchNames.length > 0 && (
+                                      <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                                        <div className="flex items-center gap-2 mb-3">
+                                          <GitBranch className="w-5 h-5 text-blue-600" />
+                                          <h4 className="font-semibold text-blue-800">Available Branches:</h4>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                          {feedback.productBranchNames.map((branchName, index) => (
+                                            <Badge 
+                                              key={index} 
+                                              className={cn("rounded-full flex items-center gap-1", getBranchColor(index))}
+                                            >
+                                              <Building className="w-3 h-3" />
+                                              {branchName}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Product Details */}
+                                    {feedback.type === 'product' && (
+                                      <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                                          <div className="flex items-center gap-2">
+                                            <Hash className="w-4 h-4 text-gray-500" />
+                                            <div>
+                                              <span className="font-semibold text-gray-600">SKU:</span>
+                                              <span className="ml-2">{feedback.productSku || 'N/A'}</span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Tag className="w-4 h-4 text-gray-500" />
+                                            <div>
+                                              <span className="font-semibold text-gray-600">Category:</span>
+                                              <span className="ml-2">{feedback.productCategory || 'N/A'}</span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <DollarSign className="w-4 h-4 text-gray-500" />
+                                            <div>
+                                              <span className="font-semibold text-gray-600">Price:</span>
+                                              <span className="ml-2">${feedback.productPrice?.toFixed(2) || '0.00'}</span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <div>
+                                              <span className="font-semibold text-gray-600">Status:</span>
+                                              <Badge className={`ml-2 ${
+                                                feedback.productStatus === 'active' 
+                                                  ? 'bg-green-100 text-green-700' 
+                                                  : feedback.productStatus === 'inactive'
+                                                  ? 'bg-gray-100 text-gray-700'
+                                                  : 'bg-red-100 text-red-700'
+                                              }`}>
+                                                {feedback.productStatus || 'N/A'}
+                                              </Badge>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Product Image */}
+                                        {feedback.productImageUrl && (
+                                          <div className="mt-3">
+                                            <p className="text-sm font-semibold text-gray-600 mb-2">Product Image:</p>
+                                            <img 
+                                              src={feedback.productImageUrl} 
+                                              alt={feedback.productName || 'Product'}
+                                              className="w-32 h-32 object-cover rounded-lg border shadow-sm"
+                                              onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                              }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    
+                                    {/* Comment */}
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                      <p className="text-gray-700 italic">"{feedback.comment}"</p>
+                                    </div>
+
+                                    {/* Admin Reply */}
+                                    {feedback.adminReply && (
+                                      <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Reply className="w-4 h-4 text-blue-600" />
+                                          <span className="text-sm font-semibold text-blue-900">Admin Response:</span>
+                                        </div>
+                                        <p className="text-blue-800">{feedback.adminReply}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Right Column - Actions */}
+                                <div className="lg:w-1/4 space-y-4">
+                                  {/* Action Buttons */}
+                                  <div className="space-y-2">
+                                    {feedback.status === 'pending' && (
+                                      <>
+                                        <Button
+                                          onClick={() => handleUpdateStatus(feedback.id, 'approved')}
+                                          disabled={updatingId === feedback.id}
+                                          className="w-full bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
+                                        >
+                                          {updatingId === feedback.id ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <CheckCircle className="w-4 h-4" />
+                                          )}
+                                          Approve
+                                        </Button>
+                                        <Button
+                                          onClick={() => handleUpdateStatus(feedback.id, 'rejected')}
+                                          disabled={updatingId === feedback.id}
+                                          className="w-full bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
+                                        >
+                                          {updatingId === feedback.id ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <XCircle className="w-4 h-4" />
+                                          )}
+                                          Reject
+                                        </Button>
+                                      </>
+                                    )}
+                                    
+                                    {/* Reply Button */}
+                                    {feedback.status === 'approved' && !feedback.adminReply && (
+                                      <Button
+                                        onClick={() => setReplyingTo(feedback.id)}
+                                        variant="outline"
+                                        className="w-full border-blue-200 text-blue-700 hover:bg-blue-50 rounded-lg flex items-center gap-2"
+                                      >
+                                        <Reply className="w-4 h-4" />
+                                        Reply to Customer
+                                      </Button>
+                                    )}
+                                  </div>
+
+                                  {/* Quick Reply Form */}
+                                  {replyingTo === feedback.id && (
+                                    <div className="space-y-2">
+                                      <Textarea
+                                        placeholder="Type your response to the customer..."
+                                        value={adminReply}
+                                        onChange={(e) => setAdminReply(e.target.value)}
+                                        className="rounded-lg min-h-[100px]"
+                                      />
+                                      <div className="flex gap-2">
+                                        <Button
+                                          onClick={() => handleAddReply(feedback.id)}
+                                          disabled={updatingId === feedback.id}
+                                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                                        >
+                                          {updatingId === feedback.id ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            'Send Reply'
+                                          )}
+                                        </Button>
+                                        <Button
+                                          onClick={() => {
+                                            setReplyingTo(null);
+                                            setAdminReply('');
+                                          }}
+                                          variant="outline"
+                                          className="rounded-lg"
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Summary Card */}
+                    {filteredFeedbacks.length > 0 && (
+                      <Card className="border-none shadow-sm rounded-xl mt-8">
+                        <CardContent className="p-6">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground mb-1">Showing</p>
+                              <p className="text-2xl font-bold text-primary">{filteredFeedbacks.length}</p>
+                              <p className="text-xs text-muted-foreground">feedbacks</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground mb-1">Avg Rating</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {filteredFeedbacks.length > 0 
+                                  ? (filteredFeedbacks.reduce((sum, f) => sum + f.rating, 0) / filteredFeedbacks.length).toFixed(2)
+                                  : '0.00'
+                                }/5
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground mb-1">Pending</p>
+                              <p className="text-2xl font-bold text-yellow-600">
+                                {filteredFeedbacks.filter(f => f.status === 'pending').length}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground mb-1">Replied</p>
+                              <p className="text-2xl font-bold text-green-600">
+                                {filteredFeedbacks.filter(f => f.adminReply).length}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </NotificationProvider>
     </ProtectedRoute>
   );
 }
